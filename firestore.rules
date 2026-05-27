@@ -1,0 +1,94 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== Helper functions =====
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isCidadao()       { return isSignedIn() && role() == 'cidadao'; }
+    function isVereador()      { return isSignedIn() && role() == 'vereador'; }
+    function isAdminMunicipal(){ return isSignedIn() && role() == 'admin_municipal'; }
+    function isAdminEstadual() { return isSignedIn() && role() == 'admin_estadual'; }
+    function isAdminMaster()   { return isSignedIn() && role() == 'admin_master'; }
+
+    // Cidade/Estado vinculados ao usuário via custom claims
+    function userCidadeId() { return request.auth.token.cidadeId; }
+    function userEstadoId() { return request.auth.token.estadoId; }
+    function userVereadorId() { return request.auth.uid; }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Garante que campos sensíveis (role, cidadeId, estadoId) não sejam
+    // alterados por escrita do próprio usuário.
+    function immutableClaimsUnchanged() {
+      return request.resource.data.role == resource.data.role
+          && request.resource.data.cidadeId == resource.data.cidadeId
+          && request.resource.data.estadoId == resource.data.estadoId;
+    }
+
+    // ===== Coleção: users =====
+    match /users/{userId} {
+
+      allow read: if isOwner(userId)
+                  || isAdminMaster()
+                  || (isAdminMunicipal() && resource.data.cidadeId == userCidadeId());
+
+      allow create: if isAdminMaster()
+                    || (isOwner(userId)
+                        && request.resource.data.role == 'cidadao');
+
+      allow update: if isAdminMaster()
+                    || (isOwner(userId) && immutableClaimsUnchanged());
+
+      allow delete: if isAdminMaster();
+    }
+
+    // ===== Coleção: demandas =====
+    match /demandas/{demandaId} {
+
+      allow read: if isAdminMaster()
+                  || isAdminEstadual()
+                  || (isAdminMunicipal() && resource.data.cidadeId == userCidadeId())
+                  || (isCidadao() && resource.data.cidadaoId == request.auth.uid)
+                  || (isVereador() && resource.data.vereadorId == userVereadorId());
+
+      allow create: if isCidadao()
+                    && request.resource.data.cidadaoId == request.auth.uid;
+
+      allow update: if isAdminMaster()
+                    || (isVereador() && resource.data.vereadorId == userVereadorId()
+                        && request.resource.data.vereadorId == resource.data.vereadorId)
+                    || (isCidadao() && resource.data.cidadaoId == request.auth.uid
+                        && request.resource.data.cidadaoId == resource.data.cidadaoId);
+
+      allow delete: if isAdminMaster()
+                    || (isCidadao() && resource.data.cidadaoId == request.auth.uid);
+    }
+
+    // ===== Coleção: radar_trends =====
+    match /radar_trends/{trendId} {
+
+      allow read: if isAdminMaster()
+                  || isAdminEstadual()
+                  || isAdminMunicipal()
+                  || isVereador();
+
+      allow write: if isAdminMaster() || isAdminEstadual();
+    }
+
+    // ===== Default deny =====
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

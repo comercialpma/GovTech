@@ -62,5 +62,13 @@ git add .
 npm run commit
 ```
 
+## 📅 Histórico de Versão
+
+| Versão | Data | Descrição | Autor |
+| :---: | :---: | :--- | :--- |
+| **1.0.0** | 27/05/2026 | Inicialização do projeto, criação do README e configuração do sistema de commits (Husky, Commitlint, Commitizen). | Equipe GovTech |
+
+> **Nota:** Para mais detalhes sobre as alterações, consulte o arquivo [CHANGELOG.md](CHANGELOG.md) (caso seja gerado posteriormente por ferramentas de CI/CD).
+
 ---
 Feito com 💻 e ☕ pela equipe GovTech!
