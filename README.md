@@ -2,11 +2,11 @@
 
 Repositório principal do projeto **GovTech**. Este repositório serve como base para o desenvolvimento de soluções voltadas para gestão e inovação tecnológica governamental.
 
-## 🚀 Sobre o Projeto
+## Sobre o Projeto
 
 O objetivo do GovTech é fornecer ferramentas robustas, acessíveis e escaláveis para facilitar os processos operacionais e administrativos no contexto governamental.
 
-## 🛠 Pré-requisitos
+## Pré-requisitos
 
 Para contribuir ou rodar o projeto localmente, certifique-se de ter as seguintes ferramentas instaladas:
 
@@ -14,7 +14,7 @@ Para contribuir ou rodar o projeto localmente, certifique-se de ter as seguintes
 - [Node.js](https://nodejs.org/en/) (Versão LTS recomendada)
 - Gerenciador de pacotes (`npm` ou `yarn`)
 
-## 📦 Como Instalar
+## Como Instalar
 
 Clone o repositório na sua máquina local:
 
@@ -24,7 +24,7 @@ cd GovTech
 npm install
 ```
 
-## ✨ Sistema de Commits e Contribuição
+## Sistema de Commits e Contribuição
 
 Este projeto utiliza um rigoroso padrão de commits baseado no **Conventional Commits**. As mensagens de commit são automaticamente validadas através de ferramentas como **Husky** e **Commitlint** antes de serem aceitas.
 
@@ -62,7 +62,7 @@ git add .
 npm run commit
 ```
 
-## 📅 Histórico de Versão
+## Histórico de Versão
 
 | Versão | Data | Descrição | Autor |
 | :---: | :---: | :--- | :--- |
@@ -71,4 +71,4 @@ npm run commit
 > **Nota:** Para mais detalhes sobre as alterações, consulte o arquivo [CHANGELOG.md](CHANGELOG.md) (caso seja gerado posteriormente por ferramentas de CI/CD).
 
 ---
-Feito com 💻 e ☕ pela equipe GovTech!
+Feito pela equipe GovTech!
