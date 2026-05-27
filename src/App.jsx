@@ -4,9 +4,12 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
 import SemPermissao from './pages/SemPermissao.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Demandas from './pages/Demandas.jsx';
+import PortalCidadao from './pages/PortalCidadao.jsx';
+import GestaoProtocolos from './pages/GestaoProtocolos.jsx';
 import Radar from './pages/Radar.jsx';
 import Configuracoes from './pages/Configuracoes.jsx';
+
+const allRoles = ['cidadao', 'vereador', 'admin_municipal', 'admin_estadual', 'admin_master'];
 
 export default function App() {
   return (
@@ -23,10 +26,18 @@ export default function App() {
         }
       />
       <Route
-        path="/demandas"
+        path="/portal-cidadao"
         element={
-          <ProtectedRoute allowedRoles={['cidadao', 'vereador', 'admin_municipal', 'admin_estadual', 'admin_master']}>
-            <Layout><Demandas /></Layout>
+          <ProtectedRoute allowedRoles={allRoles}>
+            <Layout><PortalCidadao /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/protocolos"
+        element={
+          <ProtectedRoute allowedRoles={['vereador', 'admin_municipal', 'admin_estadual', 'admin_master']}>
+            <Layout><GestaoProtocolos /></Layout>
           </ProtectedRoute>
         }
       />

@@ -1,36 +1,85 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, Radar, Settings } from 'lucide-react';
+import Icon from './Icon.jsx';
+import { useAuth } from '../hooks/useAuth.jsx';
 
-const menuItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/demandas', label: 'Demandas', icon: ListTodo },
-  { to: '/radar', label: 'Radar', icon: Radar },
-  { to: '/configuracoes', label: 'Configurações', icon: Settings },
+const menu = [
+  { to: '/', label: 'Painel Geral', icon: 'dashboard' },
+  { to: '/centro-comando', label: 'Centro de Comando', icon: 'hub' },
+  { to: '/mandato', label: 'Painel do Mandato', icon: 'assignment_ind' },
+  { to: '/portal-cidadao', label: 'Portal do Cidadão', icon: 'person_pin_circle' },
+  { to: '/protocolos', label: 'Gestão de Protocolos', icon: 'assignment' },
+  { to: '/configuracoes', label: 'Configurações', icon: 'settings' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed, onToggle }) {
+  const { logout } = useAuth();
+
   return (
-    <aside className="w-64 bg-slate-900 text-slate-100 min-h-screen p-4 flex flex-col">
-      <h1 className="text-xl font-bold mb-8 px-2">GovTech</h1>
-      <nav className="flex flex-col gap-1">
-        {menuItems.map(({ to, label, icon: Icon }) => (
+    <aside
+      className={`fixed left-0 top-0 h-full bg-primary flex flex-col py-container-padding z-50 transition-all duration-300 ${
+        collapsed ? 'w-sidebar-collapsed' : 'w-sidebar-width'
+      }`}
+    >
+      <div className={`mb-10 flex items-center justify-between ${collapsed ? 'px-4' : 'px-6'}`}>
+        {!collapsed && (
+          <div>
+            <img src="/logo.png" alt="GovTech" className="h-10 w-auto" />
+            <p className="text-label-sm text-on-primary-container opacity-80 mt-2">Portal do Cidadão</p>
+          </div>
+        )}
+        <button
+          onClick={onToggle}
+          className="text-on-primary-container hover:text-on-primary transition-colors"
+          aria-label="Recolher menu"
+        >
+          <Icon name={collapsed ? 'menu' : 'menu_open'} />
+        </button>
+      </div>
+
+      <nav className="flex-1 space-y-2 px-2">
+        {menu.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
-            end
+            end={to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              `flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-200 ${
                 isActive
-                  ? 'bg-slate-700 text-white'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'border-l-4 border-secondary text-on-primary bg-secondary-container/10 font-bold'
+                  : 'text-on-primary-container/80 hover:bg-primary-container hover:text-on-primary'
               }`
             }
           >
-            <Icon size={18} />
-            {label}
+            <Icon name={icon} />
+            {!collapsed && <span className="text-body-md">{label}</span>}
           </NavLink>
         ))}
       </nav>
+
+      <div className={collapsed ? 'px-2 py-4' : 'px-6 py-4'}>
+        <button
+          className={`bg-secondary-container text-on-secondary-container font-bold rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity ${
+            collapsed ? 'w-12 h-12 mx-auto' : 'w-full py-3'
+          }`}
+        >
+          <Icon name="add" />
+          {!collapsed && <span>Novo Protocolo</span>}
+        </button>
+      </div>
+
+      <div className="mt-auto px-2 space-y-1">
+        <a className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-primary-container transition-colors text-on-primary-container/80 hover:text-on-primary" href="#">
+          <Icon name="help" />
+          {!collapsed && <span className="text-label-sm">Central de Ajuda</span>}
+        </a>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-primary-container transition-colors text-on-primary-container/80 hover:text-on-primary"
+        >
+          <Icon name="logout" />
+          {!collapsed && <span className="text-label-sm">Sair</span>}
+        </button>
+      </div>
     </aside>
   );
 }
