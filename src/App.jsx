@@ -17,6 +17,8 @@ import Privacidade from './pages/Privacidade.jsx';
 import Ouvidoria from './pages/Ouvidoria.jsx';
 import PesquisaOpiniao from './pages/PesquisaOpiniao.jsx';
 import Vereadores from './pages/Vereadores.jsx';
+import MinhasAtividades from './pages/MinhasAtividades.jsx';
+import InteligenciaPolitica from './pages/InteligenciaPolitica.jsx';
 
 const allRoles = ['cidadao', 'vereador', 'admin_municipal', 'admin_estadual', 'admin_master'];
 
@@ -86,7 +88,23 @@ export default function App() {
       <Route path="/privacidade" element={<Layout><Privacidade /></Layout>} />
       <Route path="/ouvidoria" element={<Layout><Ouvidoria /></Layout>} />
       <Route
-        path="/pesquisa-opiniao"
+        path="/vereadores"
+        element={
+          <ProtectedRoute allowedRoles={allRoles}>
+            <Layout><Vereadores /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vereadores/atividades"
+        element={
+          <ProtectedRoute allowedRoles={allRoles}>
+            <Layout><MinhasAtividades /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vereadores/pesquisa-opiniao"
         element={
           <ProtectedRoute allowedRoles={allRoles}>
             <Layout><PesquisaOpiniao /></Layout>
@@ -94,10 +112,10 @@ export default function App() {
         }
       />
       <Route
-        path="/vereadores"
+        path="/inteligencia"
         element={
-          <ProtectedRoute allowedRoles={allRoles}>
-            <Layout><Vereadores /></Layout>
+          <ProtectedRoute allowedRoles={['vereador', 'admin_municipal', 'admin_estadual', 'admin_master']}>
+            <Layout><InteligenciaPolitica /></Layout>
           </ProtectedRoute>
         }
       />

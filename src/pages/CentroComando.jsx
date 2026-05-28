@@ -40,7 +40,6 @@ const canais = [
 ];
 
 export default function CentroComando() {
-  const [tab, setTab] = useState('whatsapp');
   const [selected, setSelected] = useState({ whatsapp: true, sms: false, push: true, email: false });
   const [audience, setAudience] = useState(12400);
   const [message, setMessage] = useState('');
@@ -388,22 +387,6 @@ export default function CentroComando() {
               <span className="bg-emerald-500/15 text-emerald-300 text-[10px] font-bold tracking-wider px-2 py-1 rounded">
                 ONLINE
               </span>
-            </div>
-
-            {/* Canais */}
-            <div className="grid grid-cols-4 gap-1 mt-4 bg-primary-container/60 p-1 rounded-xl border border-white/10">
-              {canais.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setTab(c.id)}
-                  className={`flex flex-col items-center gap-1 py-2 rounded-lg text-[10px] font-bold transition-colors ${
-                    tab === c.id ? 'bg-white/10 text-on-primary' : 'text-on-primary-container hover:text-on-primary'
-                  }`}
-                >
-                  <Icon name={c.icon} className={`text-base ${c.color}`} />
-                  {c.label}
-                </button>
-              ))}
             </div>
 
             {/* Seleção de canais */}

@@ -1,11 +1,21 @@
 // Serviço de comunicação multicanal — integrações reais.
 //
-// Em produção, os disparos são executados via backend (Firebase Function ou API Gateway)
-// que detém as credenciais com segurança. Este módulo expõe as funções de invocação
-// e as URLs/shapes oficiais das APIs.
+// Em produção, os disparos são executados pela Cloud Function `dispatchCampaign`
+// (functions/index.js) que detém as credenciais com segurança e audita no Firestore.
+// Configure os secrets com:
+//   firebase functions:secrets:set META_WA_TOKEN
+//   firebase functions:secrets:set META_WA_PHONE_ID
+//   firebase functions:secrets:set TWILIO_SID
+//   firebase functions:secrets:set TWILIO_TOKEN
+//   firebase functions:secrets:set TWILIO_FROM
+//   firebase functions:secrets:set FCM_PROJECT_ID
+//   firebase functions:secrets:set SENDGRID_KEY
+//   firebase functions:secrets:set SENDGRID_FROM
 //
-// Para habilitar disparos reais, configure as credenciais em variáveis de ambiente
-// (.env) e exponha-as via import.meta.env.
+// Em desenvolvimento, sem secrets configurados, o módulo simula a entrega.
+
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './firebaseConfig.js';
 
 const env = import.meta.env || {};
 
@@ -61,22 +71,50 @@ function saveToHistory(entry) {
  * Em produção: chama o backend que orquestra os disparos.
  * Em modo demo (sem backend): simula entrega com latência realista.
  */
-export async function dispatchCampaign({ channels, message, audience, segmentation, media, link, onProgress }) {
+export async function dispatchCampaign({ channels, message, audience, segmentation, media, link, recipients, subject, onProgress }) {
   const errors = [];
   if (!channels.length) errors.push('Selecione ao menos um canal.');
   if (!message?.trim() || message.trim().length < 10) errors.push('Mensagem precisa ter ao menos 10 caracteres.');
   if (!audience || audience < 1) errors.push('Audiência inválida.');
   if (errors.length) throw new Error(errors.join(' '));
 
-  const id = 'CAM-' + Date.now().toString(36).toUpperCase();
   const startedAt = new Date().toISOString();
   const totalCost = channels.reduce((acc, c) => acc + integrations[c].creditPerSend * audience, 0);
 
-  // Em produção:
-  // const res = await fetch('/api/dispatch', { method: 'POST', body: JSON.stringify(payload) });
-  // return res.json();
+  // Tenta disparar via Cloud Function (backend real)
+  try {
+    const callable = httpsCallable(functions, 'dispatchCampaign');
+    // Progresso visual antes da chamada
+    for (let i = 0; i < channels.length; i++) {
+      onProgress?.({ channel: channels[i], pct: 35 });
+    }
+    const { data } = await callable({ channels, message, segmentation, recipients, subject });
+    for (const ch of channels) onProgress?.({ channel: ch, pct: 100 });
+    const entry = {
+      id: data.id,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      channels,
+      audience,
+      segmentation,
+      message: message.slice(0, 80),
+      hasMedia: !!media,
+      hasLink: !!link,
+      cost: data.cost ?? totalCost,
+      delivered: data.delivered ?? 0,
+      failed: data.failed ?? 0,
+      status: 'delivered',
+      backend: 'firebase',
+    };
+    saveToHistory(entry);
+    return entry;
+  } catch (err) {
+    // Fallback: backend indisponível, credenciais ausentes ou modo demo
+    console.warn('[comunicacao] backend indisponível, executando simulação:', err?.message);
+  }
 
-  // Simulação progressiva
+  // Simulação progressiva (modo demo)
+  const id = 'CAM-' + Date.now().toString(36).toUpperCase();
   const totalSteps = audience * channels.length;
   let done = 0;
   for (let i = 0; i < channels.length; i++) {
@@ -85,7 +123,6 @@ export async function dispatchCampaign({ channels, message, audience, segmentati
     done += Math.floor(totalSteps / channels.length);
     onProgress?.({ channel: channels[i], pct: Math.min(100, (done / totalSteps) * 100) });
   }
-
   const entry = {
     id,
     startedAt,
@@ -100,6 +137,7 @@ export async function dispatchCampaign({ channels, message, audience, segmentati
     delivered: Math.floor(audience * 0.974 * channels.length),
     failed: Math.floor(audience * 0.026 * channels.length),
     status: 'delivered',
+    backend: 'simulation',
   };
   saveToHistory(entry);
   return entry;

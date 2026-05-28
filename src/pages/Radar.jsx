@@ -1,9 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import Icon from '../components/Icon.jsx';
+import { useAuth } from '../hooks/useAuth.jsx';
+
+// Mapeamento bairro → vereador responsável pela região em Contagem-MG
+const responsavelPorBairro = {
+  'Centro': { name: 'Ricardo Mendes', party: 'PSD', email: 'ricardo.mendes@camara.gov.br' },
+  'Eldorado': { name: 'Ana Paula Vaz', party: 'PT', email: 'ana.vaz@camara.gov.br' },
+  'Cidade Industrial': { name: 'Sérgio Freitas', party: 'MDB', email: 'sergio.freitas@camara.gov.br' },
+  'Riacho das Pedras': { name: 'Carla Nogueira', party: 'PSDB', email: 'carla.nogueira@camara.gov.br' },
+  'Nacional': { name: 'João Batista', party: 'PL', email: 'joao.batista@camara.gov.br' },
+  'Industrial': { name: 'Sérgio Freitas', party: 'MDB', email: 'sergio.freitas@camara.gov.br' },
+  'Inconfidentes': { name: 'Ricardo Mendes', party: 'PSD', email: 'ricardo.mendes@camara.gov.br' },
+  'Petrolândia': { name: 'Carla Nogueira', party: 'PSDB', email: 'carla.nogueira@camara.gov.br' },
+  'Sapucaias': { name: 'Ana Paula Vaz', party: 'PT', email: 'ana.vaz@camara.gov.br' },
+  'Vargem das Flores': { name: 'João Batista', party: 'PL', email: 'joao.batista@camara.gov.br' },
+  'Cabral': { name: 'Ricardo Mendes', party: 'PSD', email: 'ricardo.mendes@camara.gov.br' },
+  'Nova Contagem': { name: 'João Batista', party: 'PL', email: 'joao.batista@camara.gov.br' },
+  'Jardim Industrial': { name: 'Sérgio Freitas', party: 'MDB', email: 'sergio.freitas@camara.gov.br' },
+};
 
 // Coordenadas centradas em Contagem - MG
 const demands = [
@@ -65,6 +84,10 @@ function makeIcon(color) {
 }
 
 export default function Radar() {
+  const navigate = useNavigate();
+  const { role, user } = useAuth();
+  const isAdmin = ['admin_municipal', 'admin_estadual', 'admin_master'].includes(role);
+  const isVereador = role === 'vereador';
   const [filterDistrict, setFilterDistrict] = useState('Todos');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterCategory, setFilterCategory] = useState('Todas');
@@ -183,23 +206,55 @@ export default function Radar() {
             />
             <HeatLayer points={filtered} visible={showHeat} />
             {showPins &&
-              filtered.map((d) => (
-                <Marker key={d.id} position={[d.lat, d.lng]} icon={makeIcon(statusColors[d.status])}>
-                  <Popup>
-                    <div className="text-xs">
-                      <p className="font-bold text-primary">{d.title}</p>
-                      <p className="text-on-surface-variant">{d.district} • {d.category}</p>
-                      <p className="font-mono mt-1">#{d.id}</p>
-                      <span
-                        className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-                        style={{ backgroundColor: statusColors[d.status] }}
-                      >
-                        {d.status}
-                      </span>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+              filtered.map((d) => {
+                const responsavel = responsavelPorBairro[d.district];
+                const podeVer = isAdmin || (isVereador && responsavel && user?.email === responsavel.email);
+                return (
+                  <Marker key={d.id} position={[d.lat, d.lng]} icon={makeIcon(statusColors[d.status])}>
+                    <Popup>
+                      <div className="text-xs min-w-[220px]">
+                        <p className="font-bold text-primary text-sm">{d.title}</p>
+                        <p className="text-on-surface-variant">{d.district} • {d.category}</p>
+                        <p className="font-mono mt-1 text-[11px]">#{d.id}</p>
+                        <span
+                          className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                          style={{ backgroundColor: statusColors[d.status] }}
+                        >
+                          {d.status}
+                        </span>
+
+                        {responsavel && (
+                          <div className="mt-3 pt-2 border-t border-slate-200">
+                            <p className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">Vereador Responsável</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
+                                {responsavel.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold leading-tight">{responsavel.name}</p>
+                                <p className="text-[10px] text-slate-500 leading-tight">{responsavel.party} • {d.district}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {podeVer ? (
+                          <button
+                            onClick={() => navigate(`/protocolos?id=${d.id}`)}
+                            className="mt-3 w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Icon name="open_in_new" className="text-sm" /> Ver no Painel de Protocolos
+                          </button>
+                        ) : (
+                          <div className="mt-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-[10px] text-slate-500 flex items-center gap-1.5">
+                            <Icon name="lock" className="text-sm" /> Acesso restrito ao vereador responsável ou administradores.
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
           </MapContainer>
         </div>
       </div>

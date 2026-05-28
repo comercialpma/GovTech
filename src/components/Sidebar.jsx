@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import Icon from './Icon.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useLogo } from '../hooks/useLogo.jsx';
@@ -7,13 +7,16 @@ import { useNovoProtocolo } from '../hooks/useNovoProtocolo.jsx';
 const menu = [
   { to: '/', label: 'Observatório', icon: 'monitoring' },
   { to: '/radar', label: 'Mapa de Distribuição', icon: 'map' },
-  { to: '/vereadores', label: 'Vereadores', icon: 'groups' },
+  { to: '/vereadores', label: 'Vereadores', icon: 'groups', children: [
+    { to: '/vereadores/atividades', label: 'Minhas Atividades', icon: 'edit_note' },
+    { to: '/vereadores/pesquisa-opiniao', label: 'Pesquisa de Opinião', icon: 'poll' },
+  ]},
   { to: '/centro-comando', label: 'Centro de Comando', icon: 'hub' },
+  { to: '/inteligencia', label: 'Inteligência Política', icon: 'psychology' },
   { to: '/mandato', label: 'Painel do Mandato', icon: 'assignment_ind' },
   { to: '/portal-cidadao', label: 'Portal do Cidadão', icon: 'person_pin_circle' },
   { to: '/protocolos', label: 'Gestão de Protocolos', icon: 'assignment' },
   { to: '/usuarios', label: 'Gestão de Usuários', icon: 'group' },
-  { to: '/pesquisa-opiniao', label: 'Pesquisa de Opinião', icon: 'poll' },
   { to: '/configuracoes', label: 'Configurações', icon: 'settings' },
 ];
 
@@ -21,6 +24,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   const { logout } = useAuth();
   const [logo] = useLogo();
   const { open: openNovoProtocolo } = useNovoProtocolo();
+  const location = useLocation();
 
   return (
     <aside
@@ -60,24 +64,48 @@ export default function Sidebar({ collapsed, onToggle }) {
         </button>
       </div>
 
-      <nav className="flex-1 space-y-2 px-2">
-        {menu.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-200 ${
-                isActive
-                  ? 'border-l-4 border-secondary text-on-primary bg-secondary-container/10 font-bold'
-                  : 'text-on-primary-container/80 hover:bg-primary-container hover:text-on-primary'
-              }`
-            }
-          >
-            <Icon name={icon} />
-            {!collapsed && <span className="text-body-md">{label}</span>}
-          </NavLink>
-        ))}
+      <nav className="flex-1 space-y-2 px-2 overflow-y-auto">
+        {menu.map(({ to, label, icon, children }) => {
+          const parentActive = location.pathname === to || location.pathname.startsWith(to + '/');
+          return (
+            <div key={to}>
+              <NavLink
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors duration-200 ${
+                    isActive
+                      ? 'border-l-4 border-secondary text-on-primary bg-secondary-container/10 font-bold'
+                      : 'text-on-primary-container/80 hover:bg-primary-container hover:text-on-primary'
+                  }`
+                }
+              >
+                <Icon name={icon} />
+                {!collapsed && <span className="text-body-md">{label}</span>}
+              </NavLink>
+              {children && !collapsed && parentActive && (
+                <div className="ml-3 mt-1 mb-2 border-l border-on-primary-container/20 pl-2 space-y-1">
+                  {children.map((c) => (
+                    <NavLink
+                      key={c.to}
+                      to={c.to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 px-3 py-2 text-label-sm rounded-r transition-colors ${
+                          isActive
+                            ? 'text-secondary-fixed-dim bg-secondary-container/15 font-bold'
+                            : 'text-on-primary-container/70 hover:text-on-primary hover:bg-primary-container'
+                        }`
+                      }
+                    >
+                      <Icon name={c.icon} className="text-sm" />
+                      <span>{c.label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className={collapsed ? 'px-2 py-4' : 'px-6 py-4'}>

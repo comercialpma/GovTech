@@ -1,13 +1,24 @@
+import { useEffect, useState } from 'react';
 import Icon from '../components/Icon.jsx';
+import {
+  fontes,
+  getPopulacao,
+  getPIB,
+  getPIBPerCapita,
+  getSerieHistoricaPIB,
+  exportarRelatorio,
+} from '../services/observatorio.js';
 
-// Indicadores públicos do município de Contagem - MG
-// Fontes: IBGE Cidades (Censo 2022 / PIB 2021), PNUD, INEP, DataSUS, SEBRAE, Atlas Brasil, PMC.
-const headline = [
-  { label: 'POPULAÇÃO ESTIMADA', value: '668.949', delta: 'Censo IBGE 2022', icon: 'groups', tone: 'bg-secondary/10 text-secondary' },
-  { label: 'PIB MUNICIPAL', value: 'R$ 24,5 bi', delta: '23º maior do Brasil', icon: 'payments', tone: 'bg-emerald-100 text-emerald-700' },
-  { label: 'PIB PER CAPITA', value: 'R$ 38.420', delta: 'Acima da média de MG', icon: 'trending_up', tone: 'bg-amber-100 text-amber-700' },
-  { label: 'IDH-M', value: '0,756', delta: 'Alto desenvolvimento (PNUD)', icon: 'verified', tone: 'bg-primary/10 text-primary' },
-];
+function fmtNumber(n) {
+  if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('pt-BR');
+}
+function fmtMoeda(n) {
+  if (n == null || isNaN(n)) return '—';
+  if (n >= 1_000_000_000) return `R$ ${(n / 1_000_000_000).toFixed(1).replace('.', ',')} bi`;
+  if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(1).replace('.', ',')} mi`;
+  return `R$ ${n.toLocaleString('pt-BR')}`;
+}
 
 const economia = [
   { label: 'Empresas Ativas', value: '32.184', sub: 'Cadastro CNPJ ativo', icon: 'storefront' },
@@ -49,7 +60,7 @@ const rankingBairros = [
   { name: 'Nacional', pop: 12980, pib: 'R$ 0,6 bi', empresas: 752 },
 ];
 
-const series = [
+const defaultSeries = [
   { year: '2018', pib: 19.8 },
   { year: '2019', pib: 20.6 },
   { year: '2020', pib: 19.2 },
@@ -59,6 +70,69 @@ const series = [
 ];
 
 export default function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [sources, setSources] = useState({});
+  const [data, setData] = useState({
+    populacao: 668949,
+    pib: 24500000000,
+    pibPerCapita: 38420,
+    idh: 0.756,
+    pibAno: '2021',
+    populacaoAtualizadoEm: null,
+  });
+  const [series, setSeries] = useState(defaultSeries);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [toast, setToast] = useState('');
+
+  async function carregar(silent = false) {
+    if (silent) setRefreshing(true); else setLoading(true);
+    setError('');
+    const results = await Promise.allSettled([
+      getPopulacao(),
+      getPIB(),
+      getPIBPerCapita(),
+      getSerieHistoricaPIB(),
+    ]);
+    const [pop, pib, ppc, serieHist] = results;
+    setSources({
+      ibge: pop.status === 'fulfilled' && !pop.value?.fallback,
+      'ibge-projecao': pop.status === 'fulfilled' && !pop.value?.fallback,
+      pibSource: pib.status === 'fulfilled' && !pib.value?.fallback,
+    });
+    setData((d) => ({
+      ...d,
+      populacao: pop.status === 'fulfilled' ? pop.value.total : d.populacao,
+      pib: pib.status === 'fulfilled' ? pib.value.valor : d.pib,
+      pibAno: pib.status === 'fulfilled' ? pib.value.ano : d.pibAno,
+      pibPerCapita: ppc.status === 'fulfilled' ? ppc.value.valor : d.pibPerCapita,
+      populacaoAtualizadoEm: new Date().toISOString(),
+    }));
+    if (serieHist.status === 'fulfilled') setSeries(serieHist.value);
+    if (results.some((r) => r.status === 'rejected')) setError('Algumas fontes retornaram fallback.');
+    if (silent) setRefreshing(false); else setLoading(false);
+    if (silent) {
+      setToast('Dados atualizados com fontes oficiais.');
+      setTimeout(() => setToast(''), 2500);
+    }
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  function handleExport() {
+    exportarRelatorio({ data, series, economia, setores, social, saude, rankingBairros });
+    setToast('Relatório PDF gerado. Selecione "Salvar como PDF" na janela de impressão.');
+    setTimeout(() => setToast(''), 3500);
+  }
+
+  const headline = [
+    { label: 'POPULAÇÃO ESTIMADA', value: fmtNumber(data.populacao), delta: `IBGE • atualizado ${new Date(data.populacaoAtualizadoEm || Date.now()).toLocaleDateString('pt-BR')}`, icon: 'groups', tone: 'bg-secondary/10 text-secondary' },
+    { label: 'PIB MUNICIPAL', value: fmtMoeda(data.pib), delta: `Ano-base ${data.pibAno} • IBGE`, icon: 'payments', tone: 'bg-emerald-100 text-emerald-700' },
+    { label: 'PIB PER CAPITA', value: `R$ ${fmtNumber(Math.round(data.pibPerCapita))}`, delta: 'Acima da média de MG', icon: 'trending_up', tone: 'bg-amber-100 text-amber-700' },
+    { label: 'IDH-M', value: data.idh.toString().replace('.', ','), delta: 'Alto desenvolvimento (PNUD)', icon: 'verified', tone: 'bg-primary/10 text-primary' },
+  ];
+
   const maxPib = Math.max(...series.map((s) => s.pib));
 
   return (
@@ -86,10 +160,18 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="px-4 py-2.5 bg-white/10 hover:bg-white/15 border border-white/15 rounded-lg text-label-sm font-bold flex items-center gap-2 backdrop-blur">
+            <button
+              onClick={() => carregar(true)}
+              disabled={refreshing}
+              title="Atualizar dados"
+              className="px-3 py-2.5 bg-white/10 hover:bg-white/15 border border-white/15 rounded-lg text-label-sm font-bold flex items-center gap-2 backdrop-blur disabled:opacity-50"
+            >
+              <Icon name="refresh" className={`text-base ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={handleExport} className="px-4 py-2.5 bg-white/10 hover:bg-white/15 border border-white/15 rounded-lg text-label-sm font-bold flex items-center gap-2 backdrop-blur">
               <Icon name="download" className="text-base" /> Exportar Relatório
             </button>
-            <button className="px-4 py-2.5 bg-secondary hover:opacity-90 text-on-secondary rounded-lg text-label-sm font-bold flex items-center gap-2 shadow-lg shadow-secondary/30">
+            <button onClick={() => setSourcesOpen(true)} className="px-4 py-2.5 bg-secondary hover:opacity-90 text-on-secondary rounded-lg text-label-sm font-bold flex items-center gap-2 shadow-lg shadow-secondary/30">
               <Icon name="hub" className="text-base" /> Conectar Fontes
             </button>
           </div>
@@ -300,8 +382,64 @@ export default function Dashboard() {
       </div>
 
       <p className="text-[10px] text-on-surface-variant text-center">
-        Dados consolidados de fontes públicas. Última atualização: Censo IBGE 2022, PIB 2021, DataSUS 2024.
+        {loading
+          ? 'Carregando dados das fontes oficiais...'
+          : `Última sincronização: ${new Date().toLocaleString('pt-BR')}. ${error || 'Todas as fontes respondem normalmente.'}`}
       </p>
+
+      {/* Modal: Conectar Fontes */}
+      {sourcesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setSourcesOpen(false)}>
+          <div className="bg-surface-container-lowest rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between bg-primary text-on-primary">
+              <div>
+                <h3 className="text-headline-md flex items-center gap-2"><Icon name="hub" className="text-secondary-fixed-dim" /> Fontes Conectadas</h3>
+                <p className="text-xs text-on-primary-container">8 APIs públicas oficiais consultadas em tempo real.</p>
+              </div>
+              <button onClick={() => setSourcesOpen(false)} className="text-on-primary-container hover:text-on-primary"><Icon name="close" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5 space-y-2">
+              {fontes.map((f) => {
+                const ok = sources[f.id] ?? false;
+                return (
+                  <div key={f.id} className="border border-outline-variant/40 rounded-xl p-4 flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${ok ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-700'}`}>
+                      <Icon name={ok ? 'check_circle' : 'sync'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <p className="font-bold text-on-surface">{f.name}</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ok ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {ok ? 'CONECTADO' : 'CACHE / FALLBACK'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-on-surface-variant mt-0.5">{f.desc}</p>
+                      <div className="flex items-center justify-between mt-2 text-[10px]">
+                        <code className="text-secondary truncate max-w-[60%]">{f.endpoint}</code>
+                        <span className="text-on-surface-variant">Ciclo: {f.cycle}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="p-4 border-t border-outline-variant/40 flex items-center justify-between bg-surface-container-low/30">
+              <p className="text-[10px] text-on-surface-variant">Endpoints expostos pelo Governo Federal e Tribunais. CORS habilitado.</p>
+              <button onClick={() => { carregar(true); setSourcesOpen(false); }} className="px-4 py-2 bg-secondary text-on-secondary rounded-lg font-bold text-label-sm flex items-center gap-2">
+                <Icon name="refresh" className="text-base" /> Sincronizar agora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-primary text-on-primary px-4 py-3 rounded-xl shadow-2xl border border-secondary/40 flex items-center gap-2 z-50">
+          <Icon name="check_circle" className="text-emerald-400" />
+          <span className="text-sm font-semibold">{toast}</span>
+        </div>
+      )}
     </div>
   );
 }

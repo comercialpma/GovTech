@@ -17,6 +17,10 @@ const pageTitle = {
   '/termos': 'Termos de Uso',
   '/privacidade': 'Política de Privacidade',
   '/ouvidoria': 'Ouvidoria',
+  '/inteligencia': 'Inteligência Política',
+  '/vereadores': 'Vereadores',
+  '/vereadores/atividades': 'Vereadores › Minhas Atividades',
+  '/vereadores/pesquisa-opiniao': 'Vereadores › Pesquisa de Opinião',
 };
 
 export default function Layout({ children }) {
