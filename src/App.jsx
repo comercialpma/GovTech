@@ -16,6 +16,7 @@ import Termos from './pages/Termos.jsx';
 import Privacidade from './pages/Privacidade.jsx';
 import Ouvidoria from './pages/Ouvidoria.jsx';
 import PesquisaOpiniao from './pages/PesquisaOpiniao.jsx';
+import Vereadores from './pages/Vereadores.jsx';
 
 const allRoles = ['cidadao', 'vereador', 'admin_municipal', 'admin_estadual', 'admin_master'];
 
@@ -89,6 +90,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={allRoles}>
             <Layout><PesquisaOpiniao /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vereadores"
+        element={
+          <ProtectedRoute allowedRoles={allRoles}>
+            <Layout><Vereadores /></Layout>
           </ProtectedRoute>
         }
       />

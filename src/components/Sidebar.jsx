@@ -7,6 +7,7 @@ import { useNovoProtocolo } from '../hooks/useNovoProtocolo.jsx';
 const menu = [
   { to: '/', label: 'Observatório', icon: 'monitoring' },
   { to: '/radar', label: 'Mapa de Distribuição', icon: 'map' },
+  { to: '/vereadores', label: 'Vereadores', icon: 'groups' },
   { to: '/centro-comando', label: 'Centro de Comando', icon: 'hub' },
   { to: '/mandato', label: 'Painel do Mandato', icon: 'assignment_ind' },
   { to: '/portal-cidadao', label: 'Portal do Cidadão', icon: 'person_pin_circle' },
@@ -113,6 +114,11 @@ export default function Sidebar({ collapsed, onToggle }) {
           {!collapsed && <span className="text-label-sm">Sair</span>}
         </button>
       </div>
+      {!collapsed && (
+        <div className="mt-4 text-center text-[10px] text-on-primary-container/60 font-medium tracking-wider">
+          Versão 1.1.0
+        </div>
+      )}
     </aside>
   );
 }

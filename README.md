@@ -67,6 +67,7 @@ npm run commit
 | Versão | Data | Descrição | Autor |
 | :---: | :---: | :--- | :--- |
 | **1.0.0** | 27/05/2026 | Inicialização do projeto, criação do README e configuração do sistema de commits (Husky, Commitlint, Commitizen). | Equipe GovTech |
+| **1.1.0** | 28/05/2026 | Adiciona módulo de Desempenho Legislativo (Vereadores) e Pesquisa de Opinião. | Equipe GovTech |
 
 > **Nota:** Para mais detalhes sobre as alterações, consulte o arquivo [CHANGELOG.md](CHANGELOG.md) (caso seja gerado posteriormente por ferramentas de CI/CD).
 
