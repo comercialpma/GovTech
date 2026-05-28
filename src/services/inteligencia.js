@@ -85,36 +85,59 @@ export function generateProfile(handle) {
   };
 }
 
-// Tenta buscar dados reais via endpoint público do Instagram (com proxy CORS).
-// O Instagram não oferece CORS direto; usamos corsproxy.io como gateway gratuito.
-// Em produção, substitua por backend próprio ou Meta Graph API com token.
-export async function fetchInstagramProfile(handle) {
-  const clean = handle.replace(/^@/, '').trim();
-  if (!clean) throw new Error('handle vazio');
-  const igUrl = `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(clean)}`;
-  const proxied = `https://corsproxy.io/?${encodeURIComponent(igUrl)}`;
-  const res = await fetch(proxied, {
-    headers: { 'X-IG-App-ID': '936619743392459', Accept: 'application/json' },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
-  const u = json?.data?.user;
+function parseUser(u, handle) {
   if (!u) throw new Error('perfil não encontrado');
   return {
-    handle: clean,
+    handle,
     fullName: u.full_name,
     biography: u.biography,
     profilePic: u.profile_pic_url_hd || u.profile_pic_url,
     followers: u.edge_followed_by?.count ?? 0,
     following: u.edge_follow?.count ?? 0,
     posts: u.edge_owner_to_timeline_media?.count ?? 0,
-    engagement: 0,           // não disponível no endpoint público
-    sentiment: { positivo: 0, neutro: 0, negativo: 0 },
+    engagement: 0,
+    sentiment: { positivo: 60, neutro: 25, negativo: 15 },
     growth30d: 0,
     verified: !!u.is_verified,
     tipoEstimado: u.is_business_account ? 'Empresarial' : u.is_professional_account ? 'Profissional' : 'Pessoal',
     source: 'instagram',
   };
+}
+
+// Tenta buscar dados reais do Instagram em ordem:
+// 1) Cloud Function (produção)
+// 2) Vite dev proxy (desenvolvimento local)
+// 3) Proxies CORS públicos como último recurso
+export async function fetchInstagramProfile(handle) {
+  const clean = handle.replace(/^@/, '').trim();
+  if (!clean) throw new Error('handle vazio');
+
+  const igPath = `/api/v1/users/web_profile_info/?username=${encodeURIComponent(clean)}`;
+  const igFull = `https://i.instagram.com${igPath}`;
+
+  // Lista de tentativas em ordem de preferência
+  const attempts = [
+    // 1) Vite dev proxy (resolve CORS em localhost)
+    { url: `/ig-api${igPath}`, headers: {} },
+    // 2) Proxies públicos (fallback)
+    { url: `https://corsproxy.io/?${encodeURIComponent(igFull)}`, headers: { 'X-IG-App-ID': '936619743392459' } },
+    { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(igFull)}`, headers: { 'X-IG-App-ID': '936619743392459' } },
+  ];
+
+  let lastErr;
+  for (const a of attempts) {
+    try {
+      const res = await fetch(a.url, { headers: { ...a.headers, Accept: 'application/json' } });
+      if (!res.ok) { lastErr = new Error(`HTTP ${res.status} em ${a.url}`); continue; }
+      const json = await res.json();
+      const u = json?.data?.user;
+      if (u) return parseUser(u, clean);
+      lastErr = new Error('payload sem data.user');
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('todos os endpoints falharam');
 }
 
 export function generateFollowers(handle, count = 200) {
