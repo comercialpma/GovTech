@@ -71,5 +71,62 @@ npm run commit
 
 > **Nota:** Para mais detalhes sobre as alterações, consulte o arquivo [CHANGELOG.md](CHANGELOG.md) (caso seja gerado posteriormente por ferramentas de CI/CD).
 
+## Pendências para ativar Disparos Reais (Centro de Comando)
+
+O **Motor de Comunicação Multicanal** está 100% codificado (frontend + Cloud Function `dispatchCampaign`), mas opera em **modo simulação** por padrão. Para habilitar disparos reais via WhatsApp / SMS / Push / E-mail, é necessário concluir as etapas abaixo:
+
+### 1. Deploy da Cloud Function
+
+```bash
+firebase deploy --only functions:dispatchCampaign
+```
+
+### 2. Configurar os 8 secrets no Firebase
+
+```bash
+firebase functions:secrets:set META_WA_TOKEN       # Bearer da Meta WhatsApp Cloud API
+firebase functions:secrets:set META_WA_PHONE_ID    # PHONE_NUMBER_ID do WhatsApp Business
+firebase functions:secrets:set TWILIO_SID          # Account SID da Twilio
+firebase functions:secrets:set TWILIO_TOKEN        # Auth Token da Twilio
+firebase functions:secrets:set TWILIO_FROM         # Número remetente (formato E.164)
+firebase functions:secrets:set FCM_PROJECT_ID      # Project ID do Firebase Cloud Messaging
+firebase functions:secrets:set SENDGRID_KEY        # API Key do SendGrid
+firebase functions:secrets:set SENDGRID_FROM       # E-mail remetente verificado
+```
+
+### 3. Contas e credenciais nos provedores
+
+| Provedor | Pré-requisito |
+| :--- | :--- |
+| **Meta WhatsApp** | Meta Business Manager + WhatsApp Business Account + template aprovado pela Meta |
+| **Twilio SMS** | Conta ativa com saldo + número remetente provisionado e habilitado para BR |
+| **Firebase FCM** | Já incluído no projeto Firebase atual |
+| **SendGrid** | Conta com domínio verificado e Single Sender Authentication concluída |
+
+### 4. Popular a coleção `cidadaos` no Firestore
+
+A Cloud Function resolve os destinatários a partir do Firestore. Estrutura mínima esperada para cada documento:
+
+```json
+{
+  "nome": "Mariana Souza",
+  "telefone": "+5531999990000",
+  "email": "mariana@exemplo.com",
+  "fcmToken": "<token-fcm-opcional>",
+  "bairro": "Centro",
+  "vereadorId": "ap"
+}
+```
+
+### 5. Atribuir roles aos usuários autorizados
+
+Apenas usuários com `role` em `[vereador, admin_municipal, admin_estadual, admin_master]` podem invocar `dispatchCampaign`. Use a Cloud Function `setCustomRole` (já existente) para atribuir o papel correto via Admin SDK.
+
+### Verificação
+
+- O histórico de disparos mostra um campo `backend: 'firebase'` quando o envio foi real e `backend: 'simulation'` quando caiu no fallback de demonstração.
+- Toda campanha disparada é auditada na coleção `campanhas/{id}` do Firestore com `callerUid`, `callerRole`, `summary` por canal, `delivered`, `failed` e `cost`.
+- Em caso de falha de algum provedor, os demais canais selecionados continuam sendo executados (graceful degradation).
+
 ---
 Feito pela equipe GovTech!
