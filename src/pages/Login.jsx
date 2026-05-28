@@ -53,7 +53,12 @@ export default function Login() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="GovTech Sistema de Gestão Pública" className="h-12 w-auto bg-white p-2 rounded" />
+            <span className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
+              <Building2 size={20} className="text-white" />
+            </span>
+            <span className="text-white font-extrabold text-2xl tracking-tight">
+              Gov<span className="text-sky-400">Tech</span>
+            </span>
           </div>
 
           <div className="max-w-md">

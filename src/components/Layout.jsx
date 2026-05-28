@@ -1,15 +1,22 @@
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar.jsx';
 import TopBar from './TopBar.jsx';
+import { NovoProtocoloProvider } from '../hooks/useNovoProtocolo.jsx';
 
 const pageTitle = {
-  '/': 'Painel Geral',
+  '/': 'Observatório',
   '/portal-cidadao': 'Portal do Cidadão',
   '/protocolos': 'Gestão de Protocolos',
   '/centro-comando': 'Centro de Comando',
   '/mandato': 'Painel do Mandato',
+  '/usuarios': 'Gestão de Usuários',
+  '/radar': 'Mapa de Distribuição',
+  '/ajuda': 'Central de Ajuda',
   '/configuracoes': 'Configurações',
+  '/termos': 'Termos de Uso',
+  '/privacidade': 'Política de Privacidade',
+  '/ouvidoria': 'Ouvidoria',
 };
 
 export default function Layout({ children }) {
@@ -18,6 +25,7 @@ export default function Layout({ children }) {
   const title = pageTitle[location.pathname] || 'GovTech';
 
   return (
+    <NovoProtocoloProvider>
     <div className="min-h-screen bg-background">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
       <TopBar title={title} collapsed={collapsed} />
@@ -35,18 +43,21 @@ export default function Layout({ children }) {
       >
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4">
-            <img src="/logo.png" alt="GovTech Master" className="h-6 w-auto" />
+            <span className="text-primary font-extrabold text-base tracking-tight">
+              Gov<span className="text-secondary">Tech</span>
+            </span>
             <p className="text-on-surface-variant text-sm border-l border-outline-variant pl-4">
               © {new Date().getFullYear()} • Sistema Integrado de Gestão Municipal
             </p>
           </div>
           <div className="flex gap-8 text-on-surface-variant text-sm font-medium">
-            <a className="hover:text-secondary transition-colors" href="#">Termos de Uso</a>
-            <a className="hover:text-secondary transition-colors" href="#">Privacidade</a>
-            <a className="hover:text-secondary transition-colors" href="#">Ouvidoria</a>
+            <Link className="hover:text-secondary transition-colors" to="/termos">Termos de Uso</Link>
+            <Link className="hover:text-secondary transition-colors" to="/privacidade">Privacidade</Link>
+            <Link className="hover:text-secondary transition-colors" to="/ouvidoria">Ouvidoria</Link>
           </div>
         </div>
       </footer>
     </div>
+    </NovoProtocoloProvider>
   );
 }

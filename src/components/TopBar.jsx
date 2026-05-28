@@ -1,8 +1,10 @@
 import Icon from './Icon.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { useLogo } from '../hooks/useLogo.jsx';
 
 export default function TopBar({ title = 'Portal do Cidadão', collapsed }) {
   const { user } = useAuth();
+  const [logo] = useLogo();
 
   return (
     <header
@@ -12,6 +14,14 @@ export default function TopBar({ title = 'Portal do Cidadão', collapsed }) {
       style={{ left: collapsed ? '80px' : '280px' }}
     >
       <div className="flex items-center gap-6">
+        {logo ? (
+          <img src={logo} alt="Logo" className="h-9 w-auto max-w-[150px] object-contain" />
+        ) : (
+          <span className="text-primary font-extrabold text-lg tracking-tight">
+            Gov<span className="text-secondary">Tech</span>
+          </span>
+        )}
+        <span className="h-6 w-px bg-outline-variant" />
         <span className="text-headline-md font-extrabold text-on-surface">{title}</span>
         <div className="hidden md:flex items-center gap-4 ml-8">
           <a className="text-on-surface-variant hover:text-primary transition-all text-body-md" href="#">Diretrizes</a>

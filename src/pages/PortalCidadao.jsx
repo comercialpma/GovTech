@@ -1,12 +1,21 @@
 import Icon from '../components/Icon.jsx';
+import { useNovoProtocolo } from '../hooks/useNovoProtocolo.jsx';
 
 export default function PortalCidadao() {
+  const { open: openNovoProtocolo } = useNovoProtocolo();
   return (
     <>
       {/* Hero */}
       <section className="mb-12">
         <div className="relative rounded-2xl overflow-hidden bg-primary-container p-12 flex flex-col items-start justify-center min-h-[360px] shadow-xl">
-          <div className="absolute inset-0 z-0 bg-gradient-to-br from-primary via-primary-container to-primary opacity-90" />
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center"
+            style={{
+              backgroundImage:
+                "url('https://images.unsplash.com/photo-1449034446853-66c86144b0ad?auto=format&fit=crop&w=1920&q=70')",
+            }}
+          />
+          <div className="absolute inset-0 z-0 bg-gradient-to-br from-primary/95 via-primary-container/85 to-primary/95" />
           <div className="relative z-10 max-w-2xl">
             <span className="inline-block bg-secondary text-on-secondary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-6">
               GovTech Master
@@ -17,7 +26,7 @@ export default function PortalCidadao() {
               tempo real ou compartilhe ideias inovadoras para o seu bairro.
             </p>
             <div className="flex flex-wrap gap-4">
-              <button className="bg-secondary text-on-secondary px-8 py-4 rounded-xl font-bold flex items-center gap-3 hover:shadow-lg hover:shadow-secondary/20 transition-all active:scale-95">
+              <button onClick={openNovoProtocolo} className="bg-secondary text-on-secondary px-8 py-4 rounded-xl font-bold flex items-center gap-3 hover:shadow-lg hover:shadow-secondary/20 transition-all active:scale-95">
                 <Icon name="add_circle" /> Abrir Novo Protocolo
               </button>
               <button className="bg-surface-container-lowest text-primary px-8 py-4 rounded-xl font-bold flex items-center gap-3 hover:bg-surface-container-high transition-all active:scale-95">
