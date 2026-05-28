@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import Icon from '../components/Icon.jsx';
-import { generateProfile, generateFollowers, exportFollowersCSV, fetchInstagramProfile } from '../services/inteligencia.js';
+import { generateProfile, generateFollowers, exportFollowersCSV, fetchInstagramProfile, fetchInstagramFollowersReal, importFollowersFromCSV } from '../services/inteligencia.js';
 
 const trendingPoints = [
   { x: 0, value: 4.2 }, { x: 1, value: 3.8 }, { x: 2, value: 5.1 }, { x: 3, value: 4.4 },
@@ -96,8 +96,11 @@ export default function InteligenciaPolitica() {
 
   const [profile, setProfile] = useState(null);
   const [followers, setFollowers] = useState([]);
+  const [followerSource, setFollowerSource] = useState('simulated'); // 'instagram' | 'csv' | 'simulated'
   const [followerSearch, setFollowerSearch] = useState('');
   const [followerPage, setFollowerPage] = useState(1);
+  const [sessionId, setSessionId] = useState('');
+  const [showCookieHelp, setShowCookieHelp] = useState(false);
   const PAGE_SIZE = 10;
 
   async function iniciarRastreamento(e) {
@@ -116,12 +119,30 @@ export default function InteligenciaPolitica() {
       toastMsg = `@${igHandle}: Instagram bloqueou requisição pública. Exibindo amostra simulada.`;
     }
 
-    // Amostra de seguidores proporcional ao alcance real
-    const sampleSize = Math.min(500, Math.max(50, Math.floor(prof.followers / 50)));
-    const list = generateFollowers(igHandle, sampleSize);
+    // Tenta raspar a lista REAL de seguidores. Sem sessão, o IG retorna 401/403.
+    let list = [];
+    let src = 'simulated';
+    if (prof.userId) {
+      try {
+        const real = await fetchInstagramFollowersReal(prof.userId, { sessionId: sessionId.trim(), max: 200 });
+        if (real.length) {
+          list = real;
+          src = 'instagram';
+          toastMsg = `@${prof.handle}: ${real.length} seguidores REAIS coletados.`;
+        }
+      } catch (e) {
+        console.warn('[inteligencia] friendships/followers bloqueado:', e?.message);
+      }
+    }
+    if (!list.length) {
+      const sampleSize = Math.min(500, Math.max(50, Math.floor(prof.followers / 50)));
+      list = generateFollowers(igHandle, sampleSize);
+      src = 'simulated';
+    }
 
     setProfile(prof);
     setFollowers(list);
+    setFollowerSource(src);
     setFollowerPage(1);
     setScrapedTarget({
       handle: prof.handle,
@@ -137,6 +158,26 @@ export default function InteligenciaPolitica() {
     if (!followers.length) return showToast('Inicie um rastreamento antes de exportar.');
     exportFollowersCSV(scrapedTarget?.handle || 'analise', followers);
     showToast(`${followers.length} seguidores exportados em CSV.`);
+  }
+
+  function handleCSVImport(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = importFollowersFromCSV(String(reader.result));
+        if (!imported.length) return showToast('CSV vazio ou formato inválido.');
+        setFollowers(imported);
+        setFollowerSource('csv');
+        setFollowerPage(1);
+        showToast(`${imported.length} seguidores importados do CSV.`);
+      } catch (err) {
+        showToast(`Erro ao importar: ${err.message}`);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
   }
 
   const followersFiltered = useMemo(() => {
@@ -229,10 +270,17 @@ export default function InteligenciaPolitica() {
         <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
           <div className="flex items-start gap-4">
             <div className="relative">
-              <div className="w-16 h-16 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center text-lg font-bold uppercase overflow-hidden">
-                {profile?.profilePic
-                  ? <img src={profile.profilePic} alt={profile.handle} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  : (profile?.handle || 'GT').slice(0, 2)}
+              <div className="w-16 h-16 rounded-xl bg-secondary-container text-on-secondary-container flex items-center justify-center text-lg font-bold uppercase overflow-hidden relative">
+                <span className="absolute">{(profile?.handle || 'GT').slice(0, 2)}</span>
+                {profile?.profilePic && (
+                  <img
+                    src={profile.profilePic}
+                    alt={profile.handle}
+                    className="relative w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
               </div>
               <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white animate-pulse" />
             </div>
@@ -345,10 +393,85 @@ export default function InteligenciaPolitica() {
       {/* Lista de Seguidores */}
       {followers.length > 0 && (
         <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl shadow-sm">
+          {followerSource !== 'instagram' && (
+            <div className="px-5 pt-4 space-y-2">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-start gap-2">
+                <Icon name="info" className="text-base mt-0.5" />
+                <span>
+                  <strong>Por que não trouxe dados reais?</strong> O endpoint <code>friendships/followers</code> do
+                  Instagram exige um <strong>cookie de sessão autenticada</strong> (sessionid). Tentativas anônimas
+                  recebem HTTP 401/403. Use uma das duas alternativas abaixo para obter dados reais.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="border border-outline-variant/40 rounded-lg p-3">
+                  <p className="text-xs font-bold text-on-surface flex items-center gap-1">
+                    <Icon name="key" className="text-base text-secondary" /> Opção 1: cookie de sessão
+                  </p>
+                  <p className="text-[10px] text-on-surface-variant mt-1">
+                    Cole seu <code>sessionid</code> do Instagram (DevTools → Application → Cookies → instagram.com).
+                    Só use com sua própria conta — uso indevido pode violar os ToS do Meta.
+                  </p>
+                  <div className="flex gap-1 mt-2">
+                    <input
+                      type="password"
+                      value={sessionId}
+                      onChange={(e) => setSessionId(e.target.value)}
+                      placeholder="sessionid..."
+                      className="flex-1 px-2 py-1.5 border border-outline-variant rounded text-xs outline-none focus:border-secondary"
+                    />
+                    <button onClick={() => setShowCookieHelp((v) => !v)} className="text-secondary text-xs hover:underline">
+                      Como obter?
+                    </button>
+                  </div>
+                  {showCookieHelp && (
+                    <ol className="text-[10px] text-on-surface-variant mt-2 list-decimal pl-4 space-y-0.5">
+                      <li>Acesse instagram.com e faça login na sua conta.</li>
+                      <li>F12 → aba Application → Cookies → instagram.com.</li>
+                      <li>Copie o valor de <code>sessionid</code> e cole acima.</li>
+                      <li>Clique novamente em "Iniciar Rastreamento".</li>
+                    </ol>
+                  )}
+                </div>
+
+                <div className="border border-outline-variant/40 rounded-lg p-3">
+                  <p className="text-xs font-bold text-on-surface flex items-center gap-1">
+                    <Icon name="upload_file" className="text-base text-secondary" /> Opção 2: importar CSV
+                  </p>
+                  <p className="text-[10px] text-on-surface-variant mt-1">
+                    Exporte seus seguidores pelo Meta Business Suite ou ferramenta oficial e
+                    importe aqui. Aceita colunas: nome, username, cidade, engajamento.
+                  </p>
+                  <label className="block mt-2">
+                    <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCSVImport} />
+                    <span className="inline-block px-3 py-1.5 bg-secondary text-on-secondary rounded text-xs font-bold cursor-pointer hover:opacity-90">
+                      Escolher arquivo CSV
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+          {followerSource === 'instagram' && (
+            <div className="px-5 pt-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-start gap-2">
+                <Icon name="check_circle" className="text-base mt-0.5" />
+                <span><strong>Dados reais do Instagram</strong> coletados via API autenticada.</span>
+              </div>
+            </div>
+          )}
           <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="font-bold text-on-surface flex items-center gap-2">
                 <Icon name="groups" className="text-secondary text-base" /> Lista de Seguidores ({followersFiltered.length.toLocaleString('pt-BR')})
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  followerSource === 'instagram' ? 'bg-emerald-100 text-emerald-700'
+                  : followerSource === 'csv' ? 'bg-secondary/10 text-secondary'
+                  : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {followerSource === 'instagram' ? 'REAL' : followerSource === 'csv' ? 'CSV' : 'AMOSTRA'}
+                </span>
               </p>
               <p className="text-[10px] text-on-surface-variant">Amostra estratificada por demografia, localização e tipo de conta.</p>
             </div>

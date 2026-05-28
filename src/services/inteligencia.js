@@ -85,13 +85,20 @@ export function generateProfile(handle) {
   };
 }
 
+// Usa proxy de imagens (wsrv.nl) para contornar bloqueio CORS do CDN do Instagram
+function proxyImage(url) {
+  if (!url) return null;
+  return `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//, ''))}`;
+}
+
 function parseUser(u, handle) {
   if (!u) throw new Error('perfil não encontrado');
   return {
     handle,
+    userId: u.id || u.pk,
     fullName: u.full_name,
     biography: u.biography,
-    profilePic: u.profile_pic_url_hd || u.profile_pic_url,
+    profilePic: proxyImage(u.profile_pic_url_hd || u.profile_pic_url),
     followers: u.edge_followed_by?.count ?? 0,
     following: u.edge_follow?.count ?? 0,
     posts: u.edge_owner_to_timeline_media?.count ?? 0,
@@ -102,6 +109,87 @@ function parseUser(u, handle) {
     tipoEstimado: u.is_business_account ? 'Empresarial' : u.is_professional_account ? 'Profissional' : 'Pessoal',
     source: 'instagram',
   };
+}
+
+// Tenta raspar a lista REAL de seguidores via endpoint friendships/followers.
+// IMPORTANTE: este endpoint exige cookie de sessão autenticada (sessionid) na maioria
+// dos casos. O Instagram retorna 401/403 para chamadas anônimas. Quando o usuário
+// fornecer um sessionId válido, a função o injeta via header.
+export async function fetchInstagramFollowersReal(userId, { sessionId, max = 100 } = {}) {
+  if (!userId) throw new Error('userId obrigatório');
+  const collected = [];
+  let nextMaxId = '';
+  const igPath = (cursor) => `/api/v1/friendships/${userId}/followers/?count=50${cursor ? `&max_id=${cursor}` : ''}`;
+
+  while (collected.length < max) {
+    const path = igPath(nextMaxId);
+    const headers = { 'X-IG-App-ID': '936619743392459', Accept: 'application/json' };
+    if (sessionId) headers.Cookie = `sessionid=${sessionId}`;
+
+    const attempts = [
+      { url: `/ig-api${path}`, headers },
+      { url: `https://corsproxy.io/?${encodeURIComponent('https://i.instagram.com' + path)}`, headers: { 'X-IG-App-ID': '936619743392459' } },
+    ];
+
+    let payload;
+    for (const a of attempts) {
+      try {
+        const res = await fetch(a.url, { headers: a.headers, credentials: sessionId ? 'include' : 'omit' });
+        if (!res.ok) continue;
+        payload = await res.json();
+        break;
+      } catch { /* tenta próximo */ }
+    }
+    if (!payload?.users?.length) break;
+
+    payload.users.forEach((u) => {
+      collected.push({
+        id: u.pk,
+        nome: u.full_name || u.username,
+        username: u.username,
+        profilePic: proxyImage(u.profile_pic_url),
+        verificado: !!u.is_verified,
+        privado: !!u.is_private,
+        source: 'instagram',
+      });
+    });
+
+    if (!payload.next_max_id) break;
+    nextMaxId = payload.next_max_id;
+  }
+
+  return collected;
+}
+
+// Importa lista de seguidores a partir de CSV/JSON exportado pelo Meta Business Suite
+// ou de outras ferramentas oficiais.
+export function importFollowersFromCSV(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(Boolean);
+  const headers = lines[0].split(/[,;]/).map((h) => h.trim().toLowerCase());
+  const idx = (name) => headers.findIndex((h) => h.includes(name));
+  const iNome = idx('nome') !== -1 ? idx('nome') : idx('name');
+  const iUser = idx('username') !== -1 ? idx('username') : idx('handle');
+  const iCidade = idx('cidade') !== -1 ? idx('cidade') : idx('city');
+  const iEng = idx('engaj') !== -1 ? idx('engaj') : idx('engagement');
+
+  return lines.slice(1).map((line, i) => {
+    const cols = line.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, ''));
+    return {
+      id: i + 1,
+      nome: cols[iNome] || 'Sem nome',
+      username: cols[iUser] || `import_${i + 1}`,
+      cidade: cols[iCidade] || '—',
+      estado: '—',
+      faixaEtaria: '—',
+      tipo: 'Importado',
+      seguidores: 0,
+      engajamentoMedio: Number(cols[iEng]) || 0,
+      interesses: '',
+      ultimaInteracao: new Date().toISOString().slice(0, 10),
+      verificado: false,
+      source: 'csv',
+    };
+  });
 }
 
 // Tenta buscar dados reais do Instagram em ordem:

@@ -68,6 +68,7 @@ npm run commit
 | :---: | :---: | :--- | :--- |
 | **1.0.0** | 27/05/2026 | Inicialização do projeto, criação do README e configuração do sistema de commits (Husky, Commitlint, Commitizen). | Equipe GovTech |
 | **1.1.0** | 28/05/2026 | Adiciona módulo de Desempenho Legislativo (Vereadores) e Pesquisa de Opinião. | Equipe GovTech |
+| **1.2.0** | 28/05/2026 | Adiciona módulo de Inteligência Política com rastreamento real do Instagram, raspagem autenticada de seguidores e importação CSV. | Equipe GovTech |
 
 > **Nota:** Para mais detalhes sobre as alterações, consulte o arquivo [CHANGELOG.md](CHANGELOG.md) (caso seja gerado posteriormente por ferramentas de CI/CD).
 
@@ -127,6 +128,40 @@ Apenas usuários com `role` em `[vereador, admin_municipal, admin_estadual, admi
 - O histórico de disparos mostra um campo `backend: 'firebase'` quando o envio foi real e `backend: 'simulation'` quando caiu no fallback de demonstração.
 - Toda campanha disparada é auditada na coleção `campanhas/{id}` do Firestore com `callerUid`, `callerRole`, `summary` por canal, `delivered`, `failed` e `cost`.
 - Em caso de falha de algum provedor, os demais canais selecionados continuam sendo executados (graceful degradation).
+
+## Pendências para ativar Raspagem Real do Instagram (Inteligência Política)
+
+O módulo **Inteligência Política** já obtém dados públicos do perfil (seguidores, posts, foto, verificação) em tempo real via API pública do Instagram. Porém, a **lista de seguidores** exige autenticação — o endpoint `friendships/{user_id}/followers/` retorna 401/403 para chamadas anônimas. Há duas alternativas implementadas e uma de produção:
+
+### Alternativas já funcionais na UI
+
+1. **Cookie de sessão (`sessionid`)** — usuário cola o cookie de sua própria sessão do Instagram no campo da UI. A função `fetchInstagramFollowersReal()` injeta o cookie no header e pagina a lista real (até 200 seguidores por execução). Instruções "Como obter?" disponíveis na própria interface.
+2. **Importação de CSV** — upload de planilha exportada pelo Meta Business Suite ou ferramenta oficial. O parser identifica colunas `nome`, `username`, `cidade`, `engajamento` automaticamente.
+
+### Pendência para automatizar em produção (sem cookie manual)
+
+Para ambiente produtivo, é necessário implementar uma das abordagens abaixo:
+
+| Abordagem | Custo | Complexidade | Risco de bloqueio |
+| :--- | :--- | :--- | :--- |
+| **Meta Graph API (oficial)** | Gratuito | Alto (requer Business Account + revisão Meta) | Nenhum |
+| **Backend com Puppeteer/Playwright** | Servidor próprio | Médio | Alto (anti-bot do Meta) |
+| **Provedor terceiro (RapidAPI, ScrapingBee)** | US$ 50-500/mês | Baixo | Médio |
+
+A recomendação é integrar a **Meta Graph API** via Instagram Business Account vinculada à Page do Facebook do parlamentar (acesso apenas aos próprios seguidores, mas 100% legal e estável).
+
+### Configuração do proxy Vite (já incluído)
+
+O `vite.config.js` já contém um proxy `/ig-api` que injeta os headers corretos (`X-IG-App-ID` + User-Agent de browser) para contornar CORS em desenvolvimento local. Em produção, a chamada deve ser feita pela Cloud Function `fetchInstagramData` (a ser implementada).
+
+## Próximos Passos (Roadmap)
+
+- [ ] Implementar Cloud Function `fetchInstagramData` para raspagem server-side com cache no Firestore.
+- [ ] Integrar Meta Graph API para perfis Business com Instagram conectado.
+- [ ] Conectar `dispatchCampaign` aos provedores reais via secrets.
+- [ ] Adicionar dashboard de auditoria de campanhas disparadas.
+- [ ] Implementar análise de sentimento das menções via OpenAI/Cohere.
+- [ ] Criar fluxo de aprovação de campanhas (workflow multi-etapas).
 
 ---
 Feito pela equipe GovTech!

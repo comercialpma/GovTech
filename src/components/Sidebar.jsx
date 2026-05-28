@@ -144,7 +144,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       </div>
       {!collapsed && (
         <div className="mt-4 text-center text-[10px] text-on-primary-container/60 font-medium tracking-wider">
-          Versão 1.1.0
+          Versão 1.2.0
         </div>
       )}
     </aside>
