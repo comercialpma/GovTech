@@ -1,6 +1,6 @@
 # GovTech — Plataforma Integrada de Gestão Municipal
 
-**Versão Atual:** 1.3.0
+**Versão Atual:** 1.4.0
 **Município Piloto:** Contagem-MG
 **Stack:** React 18 + Vite 5 + Tailwind + Firebase
 
@@ -89,7 +89,11 @@ public/              # Assets estáticos (logo, contagem-bg.jpg)
 **Utilidade:** Extração de insights a partir de dados públicos abertos e mídias sociais.
 - **Radar Sinergia:** KPIs (alinhamento, alcance, sentimento), gráfico de barras e sugestões automáticas para "Gerar Minuta".
 - **Imprensa Local:** Agregador RSS de jornais locais pré-cadastrados.
-- **Rastreamento Instagram:** Extração do perfil público em tempo real e lista de seguidores via sessões.
+- **Rastreamento Instagram:** 
+  - Extração do perfil público em tempo real e análise detalhada dos 10 melhores posts.
+  - Extração rigorosa de Seguidores: *Deep Scan* de perfis (bio, contagem real, classificação) via proxy CORS customizado com injeção de Cookie (`X-Session-Id`), garantindo dados reais e transpondo bloqueios de navegadores.
+  - Motor Heurístico: Análise semântica da biografia pública do seguidor para inferir cidade de atuação e interesses, exibindo N/D para dados não públicos a fim de manter a transparência da coleta.
+  - Persistência: Histórico local de concorrentes salvos e retenção persistente do `sessionid`.
 - **Análise de Fontes Públicas:** Agregação de dados via Wikipedia, DuckDuckGo e Google News.
 
 ### 3.7 Gestão de Protocolos
@@ -223,6 +227,7 @@ Tipos aceitos de modificação: `feat`, `fix`, `docs`, `style`, `refactor`, `per
 | **1.1.0** | 28/05/2026 | Módulo de Desempenho Legislativo finalizado e Pesquisa de Opinião implementada. |
 | **1.2.0** | 28/05/2026 | Expansão de Inteligência Política (Instagram Scraper, CSV Parsers). |
 | **1.3.0** | 29/05/2026 | TopBar 100% funcional (6 dropdowns), Impostômetro em tempo real, Trilha de Auditoria LGPD, interface de autenticação reprojetada, exportação de PDFs governamentais, scripts de deploy autônomo e adaptação da identidade visual. |
+| **1.4.0** | 29/05/2026 | Refinamento da Inteligência Política com Deep Scan de perfis no Instagram, inferência heurística de biografia (cidade/interesses), persistência do sessionid, injeção de cabeçalhos via proxy Vite para bypass de CORS, e histórico de alvos monitorados. |
 
 ---
 

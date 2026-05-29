@@ -16,6 +16,13 @@ export default defineConfig({
           'X-IG-App-ID': '936619743392459',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            if (req.headers['x-session-id']) {
+              proxyReq.setHeader('Cookie', `sessionid=${req.headers['x-session-id']}`);
+            }
+          });
+        },
       },
     },
   },

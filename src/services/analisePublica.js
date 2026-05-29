@@ -32,7 +32,7 @@ export async function fetchWikipediaSummary(name) {
 
 export async function fetchNewsMentions(name) {
   if (!name) return [];
-  const query = encodeURIComponent(`"${name}"`);
+  const query = encodeURIComponent(`"${name}" Contagem`);
   const rss = `https://news.google.com/rss/search?q=${query}+when:30d&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
   const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rss)}`;
   try {

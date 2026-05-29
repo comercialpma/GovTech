@@ -17,7 +17,7 @@ const NOMES = [
   'André Sales', 'Cristina Duarte', 'Fernando Rocha', 'Bianca Monteiro', 'Roberto Tavares',
 ];
 
-const CIDADES_AL = ['Maceió', 'Arapiraca', 'Palmeira dos Índios', 'Rio Largo', 'Penedo', 'União dos Palmares', 'São Miguel dos Campos', 'Coruripe'];
+const CIDADES_CONTAGEM = ['Contagem', 'Belo Horizonte', 'Betim', 'Ibirité', 'Nova Lima', 'Ribeirão das Neves', 'Santa Luzia', 'Vespasiano'];
 const CIDADES_OUTRAS = ['São Paulo', 'Rio de Janeiro', 'Brasília', 'Salvador', 'Belo Horizonte', 'Recife', 'Fortaleza', 'Curitiba', 'Porto Alegre'];
 const FAIXAS = ['18-24', '25-34', '35-44', '45-54', '55+'];
 const SEXOS = ['F', 'M'];
@@ -93,6 +93,20 @@ function proxyImage(url) {
 
 function parseUser(u, handle) {
   if (!u) throw new Error('perfil não encontrado');
+  
+  const rawPosts = u.edge_owner_to_timeline_media?.edges || [];
+  const postsData = rawPosts.map((edge) => {
+    const node = edge.node;
+    return {
+      id: node.id,
+      caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
+      imgUrl: proxyImage(node.display_url),
+      likes: node.edge_liked_by?.count || 0,
+      comments: node.edge_media_to_comment?.count || 0,
+      url: `https://instagram.com/p/${node.shortcode}/`,
+    };
+  });
+
   return {
     handle,
     userId: u.id || u.pk,
@@ -102,6 +116,7 @@ function parseUser(u, handle) {
     followers: u.edge_followed_by?.count ?? 0,
     following: u.edge_follow?.count ?? 0,
     posts: u.edge_owner_to_timeline_media?.count ?? 0,
+    postsData,
     engagement: 0,
     sentiment: { positivo: 60, neutro: 25, negativo: 15 },
     growth30d: 0,
@@ -124,7 +139,7 @@ export async function fetchInstagramFollowersReal(userId, { sessionId, max = 100
   while (collected.length < max) {
     const path = igPath(nextMaxId);
     const headers = { 'X-IG-App-ID': '936619743392459', Accept: 'application/json' };
-    if (sessionId) headers.Cookie = `sessionid=${sessionId}`;
+    if (sessionId) headers['X-Session-Id'] = sessionId;
 
     const attempts = [
       { url: `/ig-api${path}`, headers },
@@ -156,6 +171,89 @@ export async function fetchInstagramFollowersReal(userId, { sessionId, max = 100
 
     if (!payload.next_max_id) break;
     nextMaxId = payload.next_max_id;
+  }
+
+  // Enriquecer com dados públicos dos perfis (scraping)
+  // Tentamos extrair dados reais da BIO para inferir cidade, interesses e tipo.
+  const toEnrich = collected.slice(0, 50); // Aumentado para 50
+  await Promise.all(toEnrich.map(async (f) => {
+    try {
+      const igFull = `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(f.username)}`;
+      const attempts = [
+        { url: `/ig-api/api/v1/users/web_profile_info/?username=${encodeURIComponent(f.username)}`, headers: {} },
+        { url: `https://corsproxy.io/?${encodeURIComponent(igFull)}`, headers: { 'X-IG-App-ID': '936619743392459' } }
+      ];
+      for (const a of attempts) {
+        const res = await fetch(a.url, { headers: { ...a.headers, Accept: 'application/json' } });
+        if (!res.ok) continue;
+        const json = await res.json();
+        const u = json?.data?.user;
+        if (u) {
+          f.realSeguidores = u.edge_followed_by?.count || 0;
+          f.realPosts = u.edge_owner_to_timeline_media?.count || 0;
+          f.bio = u.biography || '';
+          break;
+        }
+      }
+    } catch (e) {}
+  }));
+
+  // Processar os dados REAIS coletados
+  for (const f of collected) {
+    if (f.realSeguidores !== undefined) {
+      f.seguidores = f.realSeguidores;
+      f.engajamentoMedio = 0; // Não é possível saber sem curtir posts
+
+      // Heurística Real: Tipo
+      if (f.verificado) f.tipo = 'Institucional / Oficial';
+      else if (f.realSeguidores > 10000) f.tipo = 'Influenciador';
+      else if (f.realSeguidores > 2000) f.tipo = 'Criador de Conteúdo';
+      else f.tipo = 'Pessoal';
+
+      // Heurística Real: Extração da Bio (Cidade e Interesses)
+      const bioLower = (f.bio || '').toLowerCase();
+      
+      // Tentar achar cidade
+      f.cidade = 'N/D';
+      f.estado = '-';
+      const cityMap = { 'contagem': 'Contagem', 'bh': 'Belo Horizonte', 'belo horizonte': 'Belo Horizonte', 'betim': 'Betim', 'sp': 'São Paulo', 'rj': 'Rio de Janeiro' };
+      for (const [key, val] of Object.entries(cityMap)) {
+        if (bioLower.includes(key)) {
+          f.cidade = val;
+          f.estado = val === 'São Paulo' ? 'SP' : val === 'Rio de Janeiro' ? 'RJ' : 'MG';
+          break;
+        }
+      }
+
+      // Tentar achar interesses
+      const foundInterests = [];
+      if (bioLower.includes('polític') || bioLower.includes('vereador') || bioLower.includes('deputad')) foundInterests.push('Política');
+      if (bioLower.includes('médic') || bioLower.includes('saúde') || bioLower.includes('enferm')) foundInterests.push('Saúde');
+      if (bioLower.includes('advogad') || bioLower.includes('direito') || bioLower.includes('oab')) foundInterests.push('Direito');
+      if (bioLower.includes('engenheir') || bioLower.includes('arquitet') || bioLower.includes('obra')) foundInterests.push('Engenharia/Construção');
+      if (bioLower.includes('professor') || bioLower.includes('educaç')) foundInterests.push('Educação');
+      if (bioLower.includes('mãe') || bioLower.includes('pai de')) foundInterests.push('Família');
+      if (bioLower.includes('deus') || bioLower.includes('crist') || bioLower.includes('jesus')) foundInterests.push('Religião');
+      if (bioLower.includes('empreendedor') || bioLower.includes('ceo') || bioLower.includes('founder')) foundInterests.push('Negócios');
+      
+      f.interesses = foundInterests.length > 0 ? foundInterests.join(', ') : 'N/D';
+      
+      // Faixa etária e Ultima Interação não são públicos no Instagram
+      f.faixaEtaria = 'N/D';
+      f.ultimaInteracao = 'N/D';
+      
+    } else {
+      // Se não conseguiu enriquecer (limitado a 50), deixa como Não Disponível
+      f.seguidores = 'N/D';
+      f.engajamentoMedio = 'N/D';
+      f.bio = '';
+      f.cidade = 'N/D';
+      f.estado = '-';
+      f.faixaEtaria = 'N/D';
+      f.tipo = 'N/D';
+      f.interesses = 'N/D';
+      f.ultimaInteracao = 'N/D';
+    }
   }
 
   return collected;
@@ -235,8 +333,8 @@ export function generateFollowers(handle, count = 200) {
     const nome = pick(rng, NOMES);
     const sexo = pick(rng, SEXOS);
     const faixa = pick(rng, FAIXAS);
-    const localCidade = rng() > 0.35 ? pick(rng, CIDADES_AL) : pick(rng, CIDADES_OUTRAS);
-    const username = nome.toLowerCase().replace(/\s+/g, '.').normalize('NFD').replace(/[̀-ͯ]/g, '') + (i + 1);
+    const localCidade = rng() > 0.35 ? pick(rng, CIDADES_CONTAGEM) : pick(rng, CIDADES_OUTRAS);
+    const username = nome.toLowerCase().replace(/\s+/g, '.').normalize('NFD').replace(/[\u0300-\u036f]/g, '') + (i + 1);
     list.push({
       id: i + 1,
       nome,
@@ -244,7 +342,7 @@ export function generateFollowers(handle, count = 200) {
       sexo,
       faixaEtaria: faixa,
       cidade: localCidade,
-      estado: CIDADES_AL.includes(localCidade) ? 'AL' : 'BR',
+      estado: CIDADES_CONTAGEM.includes(localCidade) ? 'MG' : 'BR',
       seguidores: Math.floor(rng() * 5000),
       engajamentoMedio: (rng() * 12).toFixed(2),
       tipo: pick(rng, TIPOS),
@@ -263,11 +361,117 @@ export function exportFollowersCSV(handle, followers) {
     f.seguidores, f.engajamentoMedio, f.tipo, f.interesses, f.ultimaInteracao, f.verificado ? 'Sim' : 'Não',
   ]);
   const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `seguidores-${handle}-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function generatePosts(handle, count = 12) {
+  const rng = mulberry32(seedFrom(handle) ^ 0x987654);
+  const list = [];
+  const temas = ['Reunião na prefeitura', 'Ação social no bairro', 'Vistoria em obras', 'Entrevista para jornal local', 'Discussão sobre educação', 'Empreendedorismo local', 'Comunidade engajada', 'Projeto de lei aprovado'];
+  const hashtags = ['#TrabalhoSério', '#Contagem', '#Desenvolvimento', '#Educação', '#Compromisso', '#NossaCidade'];
+  
+  for (let i = 0; i < count; i++) {
+    const id = `3${Math.floor(rng() * 1000000000000000000)}`;
+    const likes = Math.floor(rng() * 1500) + 50;
+    const comments = Math.floor(rng() * 200) + 5;
+    const tema = pick(rng, temas);
+    const hash = pick(rng, hashtags) + ' ' + pick(rng, hashtags);
+    list.push({
+      id,
+      caption: `${tema} hoje discutindo novas abordagens e ouvindo a comunidade. O trabalho não para! ${hash}`,
+      imgUrl: `https://picsum.photos/seed/${id}/400/400`,
+      likes,
+      comments,
+      url: `https://instagram.com/p/simulated_${id}/`
+    });
+  }
+  return list;
+}
+
+export function exportPostsCSV(handle, posts) {
+  const headers = ['Usuario', 'ID do Post', 'Legenda', 'IMG URL', 'Nr de Likes', 'Nr de Comentarios'];
+  const rows = posts.map((p) => [
+    handle,
+    `'${p.id}`,
+    p.caption,
+    p.imgUrl,
+    p.likes,
+    p.comments
+  ]);
+  const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `posts-${handle}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function suggestVideoThemes(posts) {
+  if (!posts || posts.length === 0) return [];
+  // Simula análise de IA extraindo o "tema" baseado no engajamento
+  const topPosts = [...posts].sort((a, b) => (b.likes + b.comments) - (a.likes + a.comments)).slice(0, 3);
+  
+  const suggestions = [];
+  const textAll = topPosts.map(p => p.caption.toLowerCase()).join(' ');
+  
+  if (textAll.includes('saúde') || textAll.includes('hospital') || textAll.includes('médico')) {
+    suggestions.push({
+      theme: 'Bastidores na Saúde',
+      description: 'Grave um vídeo estilo "vlog" visitando uma unidade de saúde local, mostrando as melhorias ou conversando com pacientes. Posts com saúde geraram alto engajamento recente.',
+      icon: 'medical_services',
+      tone: 'text-emerald-600 bg-emerald-100'
+    });
+  }
+  if (textAll.includes('obra') || textAll.includes('asfalto') || textAll.includes('rua') || textAll.includes('prefeitura')) {
+    suggestions.push({
+      theme: 'Fiscalização de Obras',
+      description: 'Faça um vídeo curto (Reels) apontando o andamento de uma obra pública. A comunidade reage muito bem a prestação de contas visuais.',
+      icon: 'construction',
+      tone: 'text-amber-700 bg-amber-100'
+    });
+  }
+  if (textAll.includes('educação') || textAll.includes('escola') || textAll.includes('aluno')) {
+    suggestions.push({
+      theme: 'Diálogo com Educadores',
+      description: 'Entreviste rapidamente um professor ou diretor de escola sobre os desafios locais. Formato de corte de podcast funciona bem para isso.',
+      icon: 'school',
+      tone: 'text-blue-600 bg-blue-100'
+    });
+  }
+  
+  // Fallbacks genéricos caso não encontre palavras chaves específicas
+  if (suggestions.length === 0) {
+    suggestions.push({
+      theme: 'Vlog de Prestação de Contas',
+      description: 'Mostre sua rotina na Câmara em 60 segundos. Esse formato "por trás das câmeras" humaniza o mandato e aumenta a retenção.',
+      icon: 'videocam',
+      tone: 'text-purple-600 bg-purple-100'
+    });
+    suggestions.push({
+      theme: 'Respondendo Comentários',
+      description: 'Pegue a dúvida mais comum do seu último post com alto engajamento e responda em vídeo direto para a câmera.',
+      icon: 'forum',
+      tone: 'text-secondary bg-secondary-container'
+    });
+  }
+  
+  // Sempre adiciona uma dica sobre comunidade
+  if (suggestions.length < 3) {
+    suggestions.push({
+      theme: 'Ação no Bairro',
+      description: 'Vídeo mostrando a resolução de um problema relatado pelos moradores. Use o formato "Antes e Depois".',
+      icon: 'handshake',
+      tone: 'text-orange-600 bg-orange-100'
+    });
+  }
+
+  return suggestions.slice(0, 3);
 }

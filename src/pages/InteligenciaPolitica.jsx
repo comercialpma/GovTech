@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Icon from '../components/Icon.jsx';
-import { generateProfile, generateFollowers, exportFollowersCSV, fetchInstagramProfile, fetchInstagramFollowersReal, importFollowersFromCSV } from '../services/inteligencia.js';
+import { generateProfile, generateFollowers, generatePosts, suggestVideoThemes, exportFollowersCSV, exportPostsCSV, fetchInstagramProfile, fetchInstagramFollowersReal, importFollowersFromCSV } from '../services/inteligencia.js';
 import { runPublicAnalysis } from '../services/analisePublica.js';
 import { listJornais, addJornal, removeJornal, subscribe as subscribeImprensa, fetchFeed, SUGESTOES } from '../services/imprensaLocal.js';
 
@@ -10,6 +10,24 @@ export default function InteligenciaPolitica() {
   const [scraping, setScraping] = useState(false);
   const [scrapedTarget, setScrapedTarget] = useState(null);
   const [toast, setToast] = useState('');
+  const [savedTargets, setSavedTargets] = useState(() => JSON.parse(localStorage.getItem('gt_saved_targets') || '[]'));
+
+  useEffect(() => {
+    localStorage.setItem('gt_saved_targets', JSON.stringify(savedTargets));
+  }, [savedTargets]);
+
+  function salvarRastreado() {
+    if (!scrapedTarget) return;
+    if (!savedTargets.find(t => t.handle === scrapedTarget.handle)) {
+      setSavedTargets([...savedTargets, { handle: scrapedTarget.handle, keywords: scrapedTarget.keywords }]);
+      showToast(`@${scrapedTarget.handle} adicionado aos salvos.`);
+    }
+  }
+
+  function removerRastreado(handle) {
+    setSavedTargets(savedTargets.filter(t => t.handle !== handle));
+    showToast(`@${handle} removido.`);
+  }
 
   function showToast(msg) {
     setToast(msg);
@@ -18,34 +36,48 @@ export default function InteligenciaPolitica() {
 
   const [profile, setProfile] = useState(null);
   const [followers, setFollowers] = useState([]);
+  const [posts, setPosts] = useState([]);
   const [followerSource, setFollowerSource] = useState('simulated'); // 'instagram' | 'csv' | 'simulated'
   const [followerSearch, setFollowerSearch] = useState('');
   const [followerPage, setFollowerPage] = useState(1);
-  const [sessionId, setSessionId] = useState('');
+  const [sessionId, setSessionId] = useState(() => localStorage.getItem('gt_session_id') || '');
   const [showCookieHelp, setShowCookieHelp] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('gt_session_id', sessionId);
+  }, [sessionId]);
   const [publicAnalysis, setPublicAnalysis] = useState(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const PAGE_SIZE = 10;
 
   async function iniciarRastreamento(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!igHandle.trim()) return;
     setScraping(true);
 
     let prof;
     let toastMsg;
+    let postList = [];
     try {
       prof = await fetchInstagramProfile(igHandle);
       toastMsg = `@${prof.handle}: ${prof.followers.toLocaleString('pt-BR')} seguidores reais do Instagram.`;
+      if (prof.postsData && prof.postsData.length > 0) {
+        postList = prof.postsData;
+      }
     } catch (err) {
       console.warn('[inteligencia] fallback para dados simulados:', err?.message);
       prof = generateProfile(igHandle);
       toastMsg = `@${igHandle}: Instagram bloqueou requisição pública. Exibindo amostra simulada.`;
     }
 
+    if (postList.length === 0) {
+      postList = generatePosts(igHandle, 12);
+    }
+    setPosts(postList);
+
     // Tenta raspar a lista REAL de seguidores. Sem sessão, o IG retorna 401/403.
     let list = [];
-    let src = 'simulated';
+    let src = 'none';
     if (prof.userId) {
       try {
         const real = await fetchInstagramFollowersReal(prof.userId, { sessionId: sessionId.trim(), max: 200 });
@@ -53,15 +85,13 @@ export default function InteligenciaPolitica() {
           list = real;
           src = 'instagram';
           toastMsg = `@${prof.handle}: ${real.length} seguidores REAIS coletados.`;
+        } else {
+          toastMsg = `@${prof.handle}: Não foi possível coletar seguidores reais.`;
         }
       } catch (e) {
         console.warn('[inteligencia] friendships/followers bloqueado:', e?.message);
+        toastMsg = `@${prof.handle}: Acesso aos seguidores bloqueado. Forneça um sessionid válido.`;
       }
-    }
-    if (!list.length) {
-      const sampleSize = Math.min(500, Math.max(50, Math.floor(prof.followers / 50)));
-      list = generateFollowers(igHandle, sampleSize);
-      src = 'simulated';
     }
 
     setProfile(prof);
@@ -147,6 +177,31 @@ export default function InteligenciaPolitica() {
         <h3 className="font-bold text-on-surface flex items-center gap-2 mb-4">
           <Icon name="track_changes" className="text-secondary text-base" /> Rastreamento de Concorrência
         </h3>
+        
+        {/* Rastreamentos Salvos */}
+        {savedTargets.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-5 pb-5 border-b border-outline-variant/30">
+            <span className="text-[10px] font-bold tracking-wider text-on-surface-variant flex items-center mr-2">SALVOS:</span>
+            {savedTargets.map(t => (
+              <div
+                key={t.handle}
+                className="flex items-center bg-surface-container border border-outline-variant rounded-lg pl-3 pr-1 py-1.5 cursor-pointer hover:border-secondary hover:bg-secondary/5 transition-colors group"
+                onClick={() => { setIgHandle(t.handle); setKeywords(t.keywords.join(', ')); }}
+              >
+                <Icon name="person" className="text-[14px] text-secondary mr-1.5" />
+                <span className="text-xs font-bold text-on-surface mr-2">@{t.handle}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); removerRastreado(t.handle); }}
+                  className="p-1 hover:bg-error/10 rounded text-on-surface-variant hover:text-error transition-colors"
+                  title="Remover rastreado"
+                >
+                  <Icon name="close" className="text-[14px]" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={iniciarRastreamento} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
           <div>
             <label className="text-[10px] font-bold tracking-wider text-on-surface-variant block mb-1">ID DO INSTAGRAM</label>
@@ -179,11 +234,21 @@ export default function InteligenciaPolitica() {
           </button>
         </form>
         {scrapedTarget && (
-          <div className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
-            <Icon name="radar" className="text-base animate-pulse" />
-            Monitorando <strong>@{scrapedTarget.handle}</strong>
-            {scrapedTarget.keywords.length > 0 && ` • Palavras: ${scrapedTarget.keywords.join(', ')}`}
-            • Iniciado às {scrapedTarget.startedAt.toLocaleTimeString('pt-BR').slice(0, 5)}
+          <div className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Icon name="radar" className="text-base animate-pulse" />
+              Monitorando <strong>@{scrapedTarget.handle}</strong>
+              {scrapedTarget.keywords.length > 0 && ` • Palavras: ${scrapedTarget.keywords.join(', ')}`}
+              • Iniciado às {scrapedTarget.startedAt.toLocaleTimeString('pt-BR').slice(0, 5)}
+            </div>
+            {!savedTargets.find(t => t.handle === scrapedTarget.handle) && (
+              <button
+                onClick={salvarRastreado}
+                className="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-emerald-700 font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1 shadow-sm"
+              >
+                <Icon name="bookmark_add" className="text-sm" /> Salvar Perfil
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -264,8 +329,18 @@ export default function InteligenciaPolitica() {
           </div>
           <div className="grid grid-cols-2 gap-4 items-center">
             <div className="space-y-3">
-              <Demographic label="Faixa Etária (25-34)" value={42} color="bg-secondary" />
-              <Demographic label="Localização: Maceió" value={28} color="bg-amber-500" />
+              {(() => {
+                const topFaixa = followers.length ? Object.entries(followers.reduce((acc, f) => { acc[f.faixaEtaria] = (acc[f.faixaEtaria] || 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0] : ['-', 0];
+                const topCidade = followers.length ? Object.entries(followers.reduce((acc, f) => { acc[f.cidade] = (acc[f.cidade] || 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1])[0] : ['-', 0];
+                const faixaPerc = followers.length ? Math.round((topFaixa[1] / followers.length) * 100) : 0;
+                const cidadePerc = followers.length ? Math.round((topCidade[1] / followers.length) * 100) : 0;
+                return (
+                  <>
+                    <Demographic label={`Faixa Etária (${topFaixa[0]})`} value={faixaPerc} color="bg-secondary" />
+                    <Demographic label={`Localização: ${topCidade[0]}`} value={cidadePerc} color="bg-amber-500" />
+                  </>
+                );
+              })()}
             </div>
             <div className="h-24 flex items-end justify-center gap-1">
               {[55, 70, 45, 80, 95, 65, 50].map((v, i) => (
@@ -406,27 +481,113 @@ export default function InteligenciaPolitica() {
       )}
 
       {/* Lista de Seguidores */}
-      {followers.length > 0 && (
+      {posts.length > 0 && (
+        <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="font-bold text-on-surface flex items-center gap-2">
+                <Icon name="photo_library" className="text-secondary text-base" /> Análise de Posts (Scrap)
+              </p>
+              <p className="text-[10px] text-on-surface-variant">Últimos {posts.length} posts coletados</p>
+            </div>
+            <button
+              onClick={() => exportPostsCSV(scrapedTarget?.handle || 'analise', posts)}
+              className="px-3 py-1.5 border border-outline-variant rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-surface-container"
+            >
+              <Icon name="download" className="text-base" /> Exportar Posts (Excel)
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 space-y-4">
+               <p className="text-[10px] font-bold tracking-wider text-on-surface-variant mb-2">OS 10 POSTS MAIS ENGAJADOS</p>
+               <div className="space-y-3">
+                 {[...posts].sort((a, b) => (b.likes + b.comments) - (a.likes + a.comments)).slice(0, 10).map((post, idx) => (
+                   <div key={post.id} className="border border-outline-variant/40 rounded-xl p-3 flex gap-4 hover:bg-surface-container-low/40 transition-colors">
+                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-container flex-shrink-0 relative">
+                       {idx === 0 && <span className="absolute top-0 left-0 bg-error text-white text-[9px] font-bold px-1.5 py-0.5 rounded-br-lg z-10">TOP 1</span>}
+                       {post.imgUrl ? (
+                         <img src={post.imgUrl} alt="Post" className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => e.currentTarget.style.display = 'none'} />
+                       ) : (
+                         <div className="w-full h-full flex items-center justify-center text-on-surface-variant"><Icon name="image" className="text-xl" /></div>
+                       )}
+                     </div>
+                     <div className="flex-1 min-w-0 flex flex-col justify-center">
+                       <p className="text-xs text-on-surface line-clamp-2 mb-2">{post.caption || 'Sem legenda'}</p>
+                       <div className="flex items-center gap-3 text-[10px] font-bold text-on-surface-variant">
+                         <span className="flex items-center gap-1 text-error"><Icon name="favorite" className="text-xs" /> {post.likes.toLocaleString('pt-BR')}</span>
+                         <span className="flex items-center gap-1 text-secondary"><Icon name="chat_bubble" className="text-xs" /> {post.comments.toLocaleString('pt-BR')}</span>
+                         <a href={post.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary hover:underline ml-auto">
+                           Ver no Instagram <Icon name="open_in_new" className="text-[10px]" />
+                         </a>
+                       </div>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+            </div>
+
+            <div className="space-y-4">
+               <div className="border border-outline-variant/40 rounded-xl p-4 bg-gradient-to-br from-secondary/5 to-transparent">
+                 <p className="text-[10px] font-bold tracking-wider text-secondary mb-3 flex items-center gap-1">
+                    <Icon name="auto_awesome" className="text-base" /> SUGESTÕES DE VÍDEOS (IA)
+                 </p>
+                 <div className="space-y-4">
+                   {suggestVideoThemes(posts).map((sug, i) => (
+                     <div key={i} className="space-y-1">
+                       <div className="flex items-center gap-2">
+                         <span className={`w-6 h-6 rounded flex items-center justify-center ${sug.tone}`}><Icon name={sug.icon} className="text-[14px]" /></span>
+                         <p className="text-xs font-bold text-on-surface">{sug.theme}</p>
+                       </div>
+                       <p className="text-[11px] text-on-surface-variant leading-relaxed pl-8">{sug.description}</p>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+
+               <div className="border border-outline-variant/40 rounded-xl p-4">
+                 <p className="text-[10px] font-bold tracking-wider text-on-surface-variant mb-2">RESUMO GERAL</p>
+                 <div className="space-y-2">
+                   <div className="flex justify-between text-sm">
+                     <span className="text-on-surface-variant">Total processado:</span>
+                     <span className="font-bold text-on-surface">{posts.length}</span>
+                   </div>
+                   <div className="flex justify-between text-sm">
+                     <span className="text-on-surface-variant">Média de curtidas:</span>
+                     <span className="font-bold text-on-surface">{Math.round(posts.reduce((acc, p) => acc + p.likes, 0) / posts.length).toLocaleString('pt-BR')}</span>
+                   </div>
+                   <div className="flex justify-between text-sm">
+                     <span className="text-on-surface-variant">Média de comentários:</span>
+                     <span className="font-bold text-on-surface">{Math.round(posts.reduce((acc, p) => acc + p.comments, 0) / posts.length).toLocaleString('pt-BR')}</span>
+                   </div>
+                 </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Seguidores */}
+      {scrapedTarget && (
         <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl shadow-sm">
-          {followerSource !== 'instagram' && (
+          {followerSource === 'none' && (
             <div className="px-5 pt-4 space-y-2">
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-start gap-2">
                 <Icon name="info" className="text-base mt-0.5" />
                 <span>
-                  <strong>Por que não trouxe dados reais?</strong> O endpoint <code>friendships/followers</code> do
-                  Instagram exige um <strong>cookie de sessão autenticada</strong> (sessionid). Tentativas anônimas
-                  recebem HTTP 401/403. Use uma das duas alternativas abaixo para obter dados reais.
+                  <strong>Atenção: Você NÃO precisa da senha do concorrente!</strong> O Instagram bloqueia a visualização da lista de seguidores para usuários anônimos.
+                  Para ler os seguidores de um perfil público, o sistema precisa "estar logado" como qualquer pessoa. Use o <code>sessionid</code> da <strong>sua conta</strong> (ou de uma conta secundária) apenas como chave de acesso.
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div className="border border-outline-variant/40 rounded-lg p-3">
                   <p className="text-xs font-bold text-on-surface flex items-center gap-1">
-                    <Icon name="key" className="text-base text-secondary" /> Opção 1: cookie de sessão
+                    <Icon name="key" className="text-base text-secondary" /> Opção 1: Seu próprio cookie (Conta Fake/Secundária)
                   </p>
                   <p className="text-[10px] text-on-surface-variant mt-1">
-                    Cole seu <code>sessionid</code> do Instagram (DevTools → Application → Cookies → instagram.com).
-                    Só use com sua própria conta — uso indevido pode violar os ToS do Meta.
+                    Cole o <code>sessionid</code> do <strong>seu</strong> Instagram (DevTools → Application → Cookies).
+                    O sistema usará sua conta apenas para ler o perfil do concorrente. Recomendamos usar uma conta "fake" ou secundária.
                   </p>
                   <div className="flex gap-1 mt-2">
                     <input
@@ -436,8 +597,13 @@ export default function InteligenciaPolitica() {
                       placeholder="sessionid..."
                       className="flex-1 px-2 py-1.5 border border-outline-variant rounded text-xs outline-none focus:border-secondary"
                     />
+                    <button onClick={() => iniciarRastreamento()} disabled={scraping || !igHandle.trim()} className="px-3 py-1.5 bg-secondary text-on-secondary rounded text-xs font-bold hover:opacity-90 flex items-center gap-1 disabled:opacity-40">
+                      <Icon name="sync" className={scraping ? "animate-spin text-sm" : "text-sm"} /> Salvar e Buscar
+                    </button>
+                  </div>
+                  <div className="mt-2 text-right">
                     <button onClick={() => setShowCookieHelp((v) => !v)} className="text-secondary text-xs hover:underline">
-                      Como obter?
+                      Como obter o sessionid?
                     </button>
                   </div>
                   {showCookieHelp && (
@@ -476,7 +642,9 @@ export default function InteligenciaPolitica() {
               </div>
             </div>
           )}
-          <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between flex-wrap gap-3">
+          {followers.length > 0 && (
+            <>
+              <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="font-bold text-on-surface flex items-center gap-2">
                 <Icon name="groups" className="text-secondary text-base" /> Lista de Seguidores ({followersFiltered.length.toLocaleString('pt-BR')})
@@ -535,6 +703,7 @@ export default function InteligenciaPolitica() {
                           <p className="text-[10px] text-on-surface-variant">@{f.username}</p>
                         </div>
                       </div>
+                      {f.bio && <p className="mt-1.5 text-[9px] text-on-surface-variant leading-tight opacity-75 line-clamp-2" title={f.bio}>{f.bio}</p>}
                     </td>
                     <td className="px-4 py-3 text-sm">{f.cidade} <span className="text-[10px] text-on-surface-variant">/ {f.estado}</span></td>
                     <td className="px-4 py-3 text-sm">{f.faixaEtaria}</td>
@@ -561,6 +730,8 @@ export default function InteligenciaPolitica() {
               </button>
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
 
