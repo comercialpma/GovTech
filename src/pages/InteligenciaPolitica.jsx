@@ -1,92 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import { generateProfile, generateFollowers, exportFollowersCSV, fetchInstagramProfile, fetchInstagramFollowersReal, importFollowersFromCSV } from '../services/inteligencia.js';
-
-const trendingPoints = [
-  { x: 0, value: 4.2 }, { x: 1, value: 3.8 }, { x: 2, value: 5.1 }, { x: 3, value: 4.4 },
-  { x: 4, value: 6.8 }, { x: 5, value: 5.9 }, { x: 6, value: 8.2 }, { x: 7, value: 7.6 },
-  { x: 8, value: 9.4 }, { x: 9, value: 11.1 }, { x: 10, value: 10.3 }, { x: 11, value: 14.2 },
-];
-
-const mediaHistorica = [5.2, 5.5, 5.8, 5.7, 6.1, 6.4, 6.8, 7.2, 7.8, 8.4, 9.1, 9.6];
-
-const wordCloud = [
-  { text: 'REFORMA', size: 'text-3xl', color: 'text-secondary', extra: 'Tributária' },
-  { text: 'BRASIL', size: 'text-5xl', color: 'text-secondary font-extrabold' },
-  { text: 'Congresso', size: 'text-xl', color: 'text-on-surface-variant' },
-  { text: 'Votação', size: 'text-lg', color: 'text-on-surface-variant' },
-  { text: 'Pauta', size: 'text-base', color: 'text-on-surface-variant' },
-  { text: 'Nordeste', size: 'text-2xl', color: 'text-emerald-700 font-bold' },
-  { text: 'Emendas', size: 'text-base', color: 'text-on-surface-variant' },
-  { text: 'Liderança', size: 'text-lg', color: 'text-amber-700' },
-  { text: 'Acordo', size: 'text-base', color: 'text-on-surface-variant' },
-  { text: 'Relatório', size: 'text-sm', color: 'text-on-surface-variant' },
-];
-
-const liveFeedInicial = [
-  {
-    id: 1,
-    hora: '14:20',
-    fonte: 'PORTAL DE NOTÍCIAS',
-    tag: 'POSITIVO',
-    tagTone: 'bg-emerald-100 text-emerald-700',
-    titulo: 'Deputado anuncia novos investimentos para infraestrutura hídrica em AL',
-    descricao: 'Em coletiva de imprensa, o parlamentar detalhou o cronograma de obras que devem beneficiar mais de 200 mil pessoas no sertão.',
-    metaIcon: 'visibility',
-    meta: '10.4k views',
-    meta2Icon: 'share',
-    meta2: '450 shares',
-  },
-  {
-    id: 2,
-    hora: '12:05',
-    fonte: 'X (TWITTER)',
-    tag: 'NEUTRO',
-    tagTone: 'bg-surface-container text-on-surface-variant',
-    titulo: 'Menção viral: Discussão sobre a Reforma Administrativa ganha tração',
-    descricao: 'Thread de jornalista político detalha o posicionamento da bancada liderada por Arthur Lira na última sessão plenária.',
-    metaIcon: 'local_fire_department',
-    meta: 'Hot Topic',
-    meta2Icon: 'forum',
-    meta2: '1.3k comments',
-  },
-  {
-    id: 3,
-    hora: '09:15',
-    fonte: 'DIÁRIO OFICIAL',
-    tag: 'INSTITUCIONAL',
-    tagTone: 'bg-primary/10 text-primary',
-    titulo: 'Publicação de Portaria nº 452 - Nomeações e Ajustes',
-    descricao: 'Documento detalha as novas diretrizes de governança para projetos de transparência legislativa monitorados pela CivicPulse.',
-    metaIcon: 'verified',
-    meta: 'Fonte Oficial',
-    meta2Icon: 'picture_as_pdf',
-    meta2: 'PDF Disponível',
-  },
-];
-
-const liveFeedMore = [
-  {
-    id: 4, hora: '07:48', fonte: 'INSTAGRAM', tag: 'POSITIVO', tagTone: 'bg-emerald-100 text-emerald-700',
-    titulo: 'Post sobre programa de geração de empregos atinge 32k curtidas',
-    descricao: 'Conteúdo publicado às 06h destaca a parceria com o setor industrial e teve forte engajamento da base eleitoral.',
-    metaIcon: 'favorite', meta: '32k curtidas', meta2Icon: 'comment', meta2: '1.8k comentários',
-  },
-  {
-    id: 5, hora: '06:12', fonte: 'PODCAST POLÍTICO', tag: 'NEUTRO', tagTone: 'bg-surface-container text-on-surface-variant',
-    titulo: 'Entrevista de 45 minutos discute reforma tributária e MP do setor produtivo',
-    descricao: 'Episódio do PoderCast com mais de 80k downloads nas primeiras 4 horas.',
-    metaIcon: 'headphones', meta: '80k downloads', meta2Icon: 'schedule', meta2: '45 min',
-  },
-];
+import { runPublicAnalysis } from '../services/analisePublica.js';
+import { listJornais, addJornal, removeJornal, subscribe as subscribeImprensa, fetchFeed, SUGESTOES } from '../services/imprensaLocal.js';
 
 export default function InteligenciaPolitica() {
   const [igHandle, setIgHandle] = useState('');
   const [keywords, setKeywords] = useState('');
   const [scraping, setScraping] = useState(false);
   const [scrapedTarget, setScrapedTarget] = useState(null);
-  const [feed, setFeed] = useState(liveFeedInicial);
-  const [feedExpanded, setFeedExpanded] = useState(false);
   const [toast, setToast] = useState('');
 
   function showToast(msg) {
@@ -101,6 +23,8 @@ export default function InteligenciaPolitica() {
   const [followerPage, setFollowerPage] = useState(1);
   const [sessionId, setSessionId] = useState('');
   const [showCookieHelp, setShowCookieHelp] = useState(false);
+  const [publicAnalysis, setPublicAnalysis] = useState(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const PAGE_SIZE = 10;
 
   async function iniciarRastreamento(e) {
@@ -144,6 +68,13 @@ export default function InteligenciaPolitica() {
     setFollowers(list);
     setFollowerSource(src);
     setFollowerPage(1);
+
+    // Análise de mídia/fontes públicas em paralelo
+    setLoadingAnalysis(true);
+    setPublicAnalysis(null);
+    runPublicAnalysis(prof)
+      .then((res) => setPublicAnalysis(res))
+      .finally(() => setLoadingAnalysis(false));
     setScrapedTarget({
       handle: prof.handle,
       keywords: keywords.split(',').map((k) => k.trim()).filter(Boolean),
@@ -190,34 +121,26 @@ export default function InteligenciaPolitica() {
   const totalPages = Math.max(1, Math.ceil(followersFiltered.length / PAGE_SIZE));
   const pageItems = followersFiltered.slice((followerPage - 1) * PAGE_SIZE, followerPage * PAGE_SIZE);
 
-  function carregarMais() {
-    setFeed((f) => [...f, ...liveFeedMore]);
-    setFeedExpanded(true);
-    showToast('Histórico completo carregado.');
-  }
-
-  // Construção do path do gráfico de linhas
-  const w = 100;
-  const h = 100;
-  const maxVal = Math.max(...trendingPoints.map((p) => p.value), ...mediaHistorica);
-  const toPath = (arr) => arr.map((v, i) => {
-    const x = (i / (arr.length - 1)) * w;
-    const y = h - (v / maxVal) * (h - 10) - 5;
-    return `${i === 0 ? 'M' : 'L'}${x},${y}`;
-  }).join(' ');
-  const pathMencoes = toPath(trendingPoints.map((p) => p.value));
-  const pathHist = toPath(mediaHistorica);
-
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-headline-lg text-primary">Inteligência Política</h2>
           <p className="text-on-surface-variant">
-            Monitoramento de concorrência, análise de seguidores e tendências em tempo real.
+            Onde está o problema, o que o povo está falando e o que você deve fazer hoje.
           </p>
         </div>
+        <button
+          onClick={() => window.print()}
+          className="bg-primary text-on-primary px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 hover:opacity-90 transition-opacity"
+        >
+          <Icon name="download" className="text-base" /> Exportar Relatório
+        </button>
       </div>
+
+      <RadarMandato />
+
+      <ImprensaLocal />
 
       {/* Rastreamento de Concorrência */}
       <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
@@ -354,41 +277,133 @@ export default function InteligenciaPolitica() {
         </div>
       </div>
 
-      {/* Tendências + Nuvem */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-gutter-md">
-        <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-start justify-between mb-3">
-            <p className="font-bold text-on-surface">Tendências Públicas: Menções ao Longo do Tempo</p>
-            <span className="text-[10px] text-on-surface-variant">Recorde: <strong className="text-secondary">14.2k (Hoje)</strong></span>
+      {/* Análise Pública (Wikipedia, Mídia, Sentimento) */}
+      {(loadingAnalysis || publicAnalysis) && (
+        <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl shadow-sm">
+          <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="font-bold text-on-surface flex items-center gap-2">
+                <Icon name="travel_explore" className="text-secondary text-base" /> Análise de Fontes Públicas
+                {publicAnalysis?.name && <span className="text-[10px] font-normal text-on-surface-variant">— {publicAnalysis.name}</span>}
+              </p>
+              <p className="text-[10px] text-on-surface-variant">Wikipedia · Google News (30 dias) · DuckDuckGo · BrasilAPI</p>
+            </div>
+            {loadingAnalysis && <span className="text-xs text-on-surface-variant flex items-center gap-1"><Icon name="autorenew" className="text-base animate-spin" /> Consultando fontes...</span>}
           </div>
-          <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-56" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="gradMencoes" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0051d5" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#0051d5" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path d={`${pathMencoes} L${w},${h} L0,${h} Z`} fill="url(#gradMencoes)" />
-            <path d={pathMencoes} fill="none" stroke="#0051d5" strokeWidth="0.8" />
-            <path d={pathHist} fill="none" stroke="#cbd5e1" strokeWidth="0.6" strokeDasharray="2,2" />
-          </svg>
-          <div className="flex justify-center gap-4 text-[10px] text-on-surface-variant mt-2">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-secondary" /> Menções Diretas</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300" /> Média Histórica</span>
-          </div>
-        </div>
 
-        <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
-          <p className="font-bold text-on-surface mb-3">Nuvem de Palavras-Chave</p>
-          <div className="flex flex-wrap items-center justify-center gap-3 min-h-[200px]">
-            {wordCloud.map((w) => (
-              <span key={w.text} className={`${w.size} ${w.color} font-bold leading-none`}>
-                {w.text} {w.extra && <span className="text-xs font-normal text-on-surface-variant">{w.extra}</span>}
-              </span>
-            ))}
-          </div>
+          {publicAnalysis && (
+            <div className="p-5 grid grid-cols-12 gap-4">
+              {/* Bio / Wikipedia */}
+              <div className="col-span-12 lg:col-span-7">
+                {publicAnalysis.wiki ? (
+                  <div className="border border-outline-variant/40 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      {publicAnalysis.wiki.thumbnail && (
+                        <img src={publicAnalysis.wiki.thumbnail} alt={publicAnalysis.wiki.title} className="w-16 h-16 rounded-lg object-cover" referrerPolicy="no-referrer" />
+                      )}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-on-surface">{publicAnalysis.wiki.title}</p>
+                          <span className="text-[10px] font-bold bg-secondary/10 text-secondary px-1.5 py-0.5 rounded">WIKIPEDIA</span>
+                        </div>
+                        {publicAnalysis.wiki.description && <p className="text-xs text-on-surface-variant">{publicAnalysis.wiki.description}</p>}
+                        <p className="text-sm text-on-surface mt-2 leading-relaxed">{publicAnalysis.wiki.extract}</p>
+                        <a href={publicAnalysis.wiki.url} target="_blank" rel="noreferrer" className="text-xs text-secondary hover:underline mt-2 inline-flex items-center gap-1">
+                          <Icon name="open_in_new" className="text-sm" /> Ler na Wikipedia
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : publicAnalysis.ddg?.abstract ? (
+                  <div className="border border-outline-variant/40 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <p className="font-bold text-on-surface">{publicAnalysis.name}</p>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{publicAnalysis.ddg.source || 'DUCKDUCKGO'}</span>
+                    </div>
+                    <p className="text-sm text-on-surface leading-relaxed">{publicAnalysis.ddg.abstract}</p>
+                    {publicAnalysis.ddg.url && (
+                      <a href={publicAnalysis.ddg.url} target="_blank" rel="noreferrer" className="text-xs text-secondary hover:underline mt-2 inline-flex items-center gap-1">
+                        <Icon name="open_in_new" className="text-sm" /> Fonte
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border border-dashed border-outline-variant rounded-xl p-6 text-center text-sm text-on-surface-variant">
+                    Nenhuma biografia pública encontrada para "{publicAnalysis.name}".
+                  </div>
+                )}
+              </div>
+
+              {/* Sentimento de mídia + palavras-chave */}
+              <div className="col-span-12 lg:col-span-5 space-y-3">
+                <div className="border border-outline-variant/40 rounded-xl p-4">
+                  <p className="text-[10px] font-bold tracking-wider text-on-surface-variant">SENTIMENTO DA MÍDIA ({publicAnalysis.sentiment?.total || 0} notícias)</p>
+                  {publicAnalysis.sentiment?.total > 0 ? (
+                    <>
+                      <div className="flex h-2 rounded-full overflow-hidden mt-2">
+                        <div className="bg-emerald-500" style={{ width: `${publicAnalysis.sentiment.positivo}%` }} />
+                        <div className="bg-surface-container" style={{ width: `${publicAnalysis.sentiment.neutro}%` }} />
+                        <div className="bg-error" style={{ width: `${publicAnalysis.sentiment.negativo}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] mt-2 text-on-surface-variant">
+                        <span className="text-emerald-600 font-bold">+{publicAnalysis.sentiment.positivo}%</span>
+                        <span>{publicAnalysis.sentiment.neutro}% neutro</span>
+                        <span className="text-error font-bold">-{publicAnalysis.sentiment.negativo}%</span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-on-surface-variant mt-2">Sem notícias recentes nos últimos 30 dias.</p>
+                  )}
+                </div>
+
+                {publicAnalysis.keywords?.length > 0 && (
+                  <div className="border border-outline-variant/40 rounded-xl p-4">
+                    <p className="text-[10px] font-bold tracking-wider text-on-surface-variant mb-2">PALAVRAS MAIS CITADAS</p>
+                    <div className="flex flex-wrap gap-1">
+                      {publicAnalysis.keywords.map((k) => (
+                        <span
+                          key={k.word}
+                          className="px-2 py-0.5 rounded-full bg-secondary/10 text-secondary text-xs font-semibold"
+                          style={{ fontSize: `${Math.min(16, 11 + k.count)}px` }}
+                        >
+                          {k.word}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Lista de notícias */}
+              {publicAnalysis.news?.length > 0 && (
+                <div className="col-span-12">
+                  <p className="text-[10px] font-bold tracking-wider text-on-surface-variant mb-2 flex items-center gap-2">
+                    <Icon name="newspaper" className="text-secondary text-base" /> ÚLTIMAS MENÇÕES NA MÍDIA ({publicAnalysis.news.length})
+                  </p>
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-2">
+                    {publicAnalysis.news.map((n, i) => (
+                      <a key={i} href={n.link} target="_blank" rel="noreferrer" className="block border border-outline-variant/40 rounded-lg p-3 hover:border-secondary hover:bg-surface-container-low/40 transition-colors">
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-on-surface group-hover:text-secondary line-clamp-2">{n.title}</p>
+                            {n.description && <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-2">{n.description}</p>}
+                          </div>
+                          <Icon name="open_in_new" className="text-on-surface-variant text-base" />
+                        </div>
+                        <div className="flex items-center gap-3 mt-2 text-[10px] text-on-surface-variant">
+                          <span className="font-bold text-secondary">{n.source}</span>
+                          <span>·</span>
+                          <span>{n.pubDate ? new Date(n.pubDate).toLocaleDateString('pt-BR') : '—'}</span>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Lista de Seguidores */}
       {followers.length > 0 && (
@@ -549,50 +564,6 @@ export default function InteligenciaPolitica() {
         </div>
       )}
 
-      {/* Monitoramento em Tempo Real */}
-      <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl shadow-sm">
-        <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between">
-          <p className="font-bold text-on-surface flex items-center gap-2">
-            <Icon name="rss_feed" className="text-secondary text-base" /> Monitoramento em Tempo Real
-          </p>
-          <span className="flex items-center gap-1 text-xs text-error font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" /> Live Feed
-          </span>
-        </div>
-        <div className="divide-y divide-outline-variant/30">
-          {feed.map((item) => (
-            <div key={item.id} className="p-5 hover:bg-surface-container-low/30 flex gap-4">
-              <div className="text-center w-12 flex-shrink-0">
-                <p className="font-bold text-sm text-on-surface">{item.hora}</p>
-                <span className="block w-2 h-2 rounded-full bg-emerald-500 mx-auto mt-1" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-[10px] font-bold tracking-wider text-on-surface-variant">{item.fonte}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.tagTone}`}>{item.tag}</span>
-                </div>
-                <p className="font-semibold text-on-surface mt-1">{item.titulo}</p>
-                <p className="text-sm text-on-surface-variant mt-1">{item.descricao}</p>
-                <div className="flex gap-4 mt-2 text-[10px] text-on-surface-variant">
-                  <span className="flex items-center gap-1"><Icon name={item.metaIcon} className="text-sm" /> {item.meta}</span>
-                  <span className="flex items-center gap-1"><Icon name={item.meta2Icon} className="text-sm" /> {item.meta2}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 text-center border-t border-outline-variant/30 bg-surface-container-low/30">
-          <button
-            onClick={carregarMais}
-            disabled={feedExpanded}
-            className="text-secondary font-bold text-label-sm hover:underline flex items-center justify-center gap-1 mx-auto disabled:opacity-50 disabled:no-underline"
-          >
-            <Icon name="expand_more" className="text-base" />
-            {feedExpanded ? 'Histórico completo carregado' : 'Carregar histórico completo'}
-          </button>
-        </div>
-      </div>
-
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 bg-primary text-on-primary px-4 py-3 rounded-xl shadow-2xl border border-secondary/40 flex items-center gap-2 z-50">
@@ -600,6 +571,421 @@ export default function InteligenciaPolitica() {
           <span className="text-sm font-semibold">{toast}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ===== Radar Sinergia: Visão do Mandato (mock data, foco em ação) =====
+const RM_PROBLEMAS = [
+  { label: 'Asfalto', qtd: 58, color: 'bg-error' },
+  { label: 'Saúde', qtd: 49, color: 'bg-amber-500' },
+  { label: 'Iluminação', qtd: 32, color: 'bg-secondary' },
+  { label: 'Segurança', qtd: 21, color: 'bg-purple-500' },
+  { label: 'Limpeza', qtd: 14, color: 'bg-emerald-500' },
+];
+const RM_BAIRROS = [
+  { nome: 'Eldorado', qtd: 43 },
+  { nome: 'Cidade Industrial', qtd: 38 },
+  { nome: 'Petrolândia', qtd: 27 },
+  { nome: 'Riacho das Pedras', qtd: 22 },
+  { nome: 'Centro', qtd: 19 },
+];
+const RM_TRENDING = [
+  { tag: 'Falta de médico na UPA Eldorado', mentions: '2.3k', tone: 'text-error' },
+  { tag: 'Buraco na Av. João César de Oliveira', mentions: '1.7k', tone: 'text-amber-600' },
+  { tag: 'Reforma da Praça Petrolândia', mentions: '892', tone: 'text-secondary' },
+  { tag: 'Iluminação Rua dos Inconfidentes', mentions: '514', tone: 'text-on-surface-variant' },
+];
+const RM_SUGESTOES = [
+  {
+    titulo: 'Pico de reclamações sobre Saúde em Eldorado',
+    desc: 'Volume 3,2x acima da média semanal. Sugestão: Emitir Requerimento de Informação à Secretaria Municipal de Saúde solicitando escala médica e prazo para normalização.',
+    icon: 'medical_services',
+    tone: 'border-error/40 bg-error/5',
+    iconTone: 'bg-error/10 text-error',
+  },
+  {
+    titulo: 'Concentração de buracos na Regional Industrial',
+    desc: '12 protocolos em 5 dias na mesma extensão. Sugestão: Indicação ao Executivo solicitando programa de recapeamento emergencial e cronograma público.',
+    icon: 'engineering',
+    tone: 'border-amber-500/40 bg-amber-50',
+    iconTone: 'bg-amber-100 text-amber-700',
+  },
+  {
+    titulo: 'Sentimento negativo crescente sobre segurança',
+    desc: 'Menções a "assalto" e "guarda municipal" cresceram 41% em 7 dias. Sugestão: Pauta para Audiência Pública conjunta com a Secretaria de Defesa Social.',
+    icon: 'shield',
+    tone: 'border-purple-500/40 bg-purple-50',
+    iconTone: 'bg-purple-100 text-purple-700',
+  },
+];
+
+function RadarMandato() {
+  const [toast, setToast] = useState('');
+  const maxProb = Math.max(...RM_PROBLEMAS.map((p) => p.qtd));
+  const maxBairro = Math.max(...RM_BAIRROS.map((b) => b.qtd));
+
+  function gerarMinuta(s) {
+    const conteudo = `REQUERIMENTO Nº ___/${new Date().getFullYear()}\n\nExmo. Sr. Presidente da Câmara Municipal de Contagem,\n\nO Vereador signatário, nos termos do Regimento Interno, REQUER seja oficiada à autoridade competente solicitando providências quanto à seguinte matéria:\n\n${s.titulo}\n\nJUSTIFICATIVA:\n${s.desc}\n\nContagem, ${new Date().toLocaleDateString('pt-BR')}.\n\n_________________________________________\nVereador Responsável`;
+    const blob = new Blob([conteudo], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `minuta-${s.titulo.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setToast('Minuta gerada e baixada.');
+    setTimeout(() => setToast(''), 2500);
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <KpiCard
+          icon="report_problem"
+          tone="bg-error/10 text-error"
+          label="DEMANDAS ABERTAS"
+          value="142"
+          hint="↑ 12% vs. semana passada"
+          hintTone="text-error"
+        />
+        <KpiCard
+          icon="task_alt"
+          tone="bg-emerald-100 text-emerald-700"
+          label="RESOLVIDAS NA SEMANA"
+          value="38"
+          hint="Taxa de resolução: 73%"
+          hintTone="text-emerald-600"
+        />
+        <KpiCard
+          icon="trending_down"
+          tone="bg-amber-100 text-amber-700"
+          label="SENTIMENTO GERAL (REDES)"
+          value="65% Negativo"
+          hint="2.847 menções nas últimas 24h"
+          hintTone="text-on-surface-variant"
+        />
+      </div>
+
+      {/* Gráficos */}
+      <div className="grid grid-cols-12 gap-4">
+        {/* Bar chart */}
+        <div className="col-span-12 lg:col-span-7 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-5">
+            <p className="font-bold text-on-surface flex items-center gap-2">
+              <Icon name="bar_chart" className="text-secondary text-base" /> Principais Problemas da Cidade
+            </p>
+            <span className="text-[10px] text-on-surface-variant">últimos 30 dias</span>
+          </div>
+          <div className="grid grid-cols-5 gap-3 items-end h-44">
+            {RM_PROBLEMAS.map((p) => (
+              <div key={p.label} className="flex flex-col items-center justify-end gap-2 h-full">
+                <span className="text-xs font-bold text-on-surface">{p.qtd}</span>
+                <div
+                  className={`w-full ${p.color} rounded-t-md transition-all`}
+                  style={{ height: `${(p.qtd / maxProb) * 85}%` }}
+                />
+                <span className="text-[10px] text-on-surface-variant text-center">{p.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Heatmap bairros */}
+        <div className="col-span-12 lg:col-span-5 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-bold text-on-surface flex items-center gap-2">
+              <Icon name="location_on" className="text-error text-base" /> Mapa de Calor — Top Bairros
+            </p>
+            <span className="text-[10px] text-on-surface-variant">reclamações</span>
+          </div>
+          <div className="space-y-3">
+            {RM_BAIRROS.map((b, i) => (
+              <div key={b.nome}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="flex items-center gap-2">
+                    <span className={`w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center ${i === 0 ? 'bg-error text-white' : 'bg-secondary/10 text-secondary'}`}>
+                      {i + 1}
+                    </span>
+                    <span className="font-semibold text-on-surface">{b.nome}</span>
+                  </span>
+                  <span className="font-bold text-on-surface">{b.qtd}</span>
+                </div>
+                <div className="h-2 bg-surface-container rounded-full overflow-hidden">
+                  <div
+                    className={`h-2 rounded-full ${i === 0 ? 'bg-error' : i === 1 ? 'bg-amber-500' : 'bg-secondary'}`}
+                    style={{ width: `${(b.qtd / maxBairro) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Trending Topics */}
+        <div className="col-span-12 lg:col-span-5 bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-bold text-on-surface flex items-center gap-2">
+              <Icon name="trending_up" className="text-secondary text-base" /> Trending nas Redes (24h)
+            </p>
+            <span className="text-[10px] text-error font-bold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse" /> AO VIVO
+            </span>
+          </div>
+          <div className="space-y-2">
+            {RM_TRENDING.map((t, i) => (
+              <div key={i} className="flex items-center justify-between p-2 border border-outline-variant/40 rounded-lg">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] font-bold text-on-surface-variant w-4">#{i + 1}</span>
+                  <span className="text-sm truncate">{t.tag}</span>
+                </div>
+                <span className={`text-xs font-bold ${t.tone} ml-2 whitespace-nowrap`}>{t.mentions}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Sugestões IA */}
+        <div className="col-span-12 lg:col-span-7 bg-gradient-to-br from-secondary/5 to-primary/5 border border-secondary/30 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-bold text-on-surface flex items-center gap-2">
+              <Icon name="auto_awesome" className="text-secondary text-base" /> Sugestões da Inteligência Artificial
+            </p>
+            <span className="text-[10px] font-bold bg-secondary/10 text-secondary px-2 py-0.5 rounded-full">RADAR IA</span>
+          </div>
+          <div className="space-y-3">
+            {RM_SUGESTOES.map((s, i) => (
+              <div key={i} className={`border ${s.tone} rounded-xl p-3 flex items-start gap-3`}>
+                <div className={`w-10 h-10 rounded-lg ${s.iconTone} flex items-center justify-center flex-shrink-0`}>
+                  <Icon name={s.icon} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-on-surface text-sm">{s.titulo}</p>
+                  <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{s.desc}</p>
+                </div>
+                <button
+                  onClick={() => gerarMinuta(s)}
+                  className="bg-secondary text-on-secondary px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all flex items-center gap-1 flex-shrink-0"
+                >
+                  <Icon name="description" className="text-sm" /> Gerar Minuta
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-primary text-on-primary px-4 py-3 rounded-xl shadow-2xl border border-secondary/40 flex items-center gap-2 z-50">
+          <Icon name="check_circle" className="text-emerald-400" />
+          <span className="text-sm font-semibold">{toast}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Imprensa Local — agregador de RSS de jornais =====
+function ImprensaLocal() {
+  const [jornais, setJornais] = useState(() => listJornais());
+  const [feeds, setFeeds] = useState({});           // {jornalId: {items, error, loading}}
+  const [adding, setAdding] = useState(false);
+  const [novoNome, setNovoNome] = useState('');
+  const [novoRss, setNovoRss] = useState('');
+  const [toast, setToast] = useState('');
+
+  // Carrega feeds quando a lista muda
+  useEffect(() => {
+    const unsub = subscribeImprensa(() => setJornais(listJornais()));
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    jornais.forEach((j) => {
+      if (feeds[j.id]) return;
+      setFeeds((prev) => ({ ...prev, [j.id]: { loading: true, items: [] } }));
+      fetchFeed(j.rss).then((data) => {
+        setFeeds((prev) => ({ ...prev, [j.id]: { ...data, loading: false } }));
+      });
+    });
+  }, [jornais]); // eslint-disable-line
+
+  function refresh(j) {
+    setFeeds((prev) => ({ ...prev, [j.id]: { loading: true, items: [] } }));
+    fetchFeed(j.rss).then((data) => {
+      setFeeds((prev) => ({ ...prev, [j.id]: { ...data, loading: false } }));
+    });
+  }
+
+  function adicionar(e) {
+    e?.preventDefault();
+    if (!novoNome.trim() || !novoRss.trim()) return;
+    addJornal({ nome: novoNome.trim(), rss: novoRss.trim(), url: novoRss.trim() });
+    setNovoNome('');
+    setNovoRss('');
+    setAdding(false);
+    setToast('Jornal adicionado.');
+    setTimeout(() => setToast(''), 2000);
+  }
+
+  function adicionarSugestao(s) {
+    addJornal(s);
+    setToast(`${s.nome} adicionado.`);
+    setTimeout(() => setToast(''), 2000);
+  }
+
+  function remover(j) {
+    removeJornal(j.id);
+    setFeeds((prev) => { const c = { ...prev }; delete c[j.id]; return c; });
+  }
+
+  const naoAdicionados = SUGESTOES.filter((s) => !jornais.some((j) => j.rss === s.rss));
+  const totalNoticias = Object.values(feeds).reduce((s, f) => s + (f.items?.length || 0), 0);
+
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl shadow-sm">
+      <div className="p-5 border-b border-outline-variant/40 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="font-bold text-on-surface flex items-center gap-2">
+            <Icon name="newspaper" className="text-secondary text-base" /> Imprensa Local — Agregador
+            {totalNoticias > 0 && <span className="text-[10px] font-normal text-on-surface-variant">({totalNoticias} notícias)</span>}
+          </p>
+          <p className="text-[10px] text-on-surface-variant">Adicione URLs de feeds RSS dos jornais que você acompanha. Atualizamos as últimas 10 manchetes de cada um.</p>
+        </div>
+        <button onClick={() => setAdding((v) => !v)} className="bg-secondary text-on-secondary px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1">
+          <Icon name={adding ? 'close' : 'add'} className="text-base" /> {adding ? 'Cancelar' : 'Adicionar Jornal'}
+        </button>
+      </div>
+
+      {/* Formulário */}
+      {adding && (
+        <div className="p-5 border-b border-outline-variant/40 bg-surface-container-low/30 space-y-3">
+          <form onSubmit={adicionar} className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2 items-end">
+            <div>
+              <label className="text-[10px] font-bold tracking-wider text-on-surface-variant block mb-1">NOME DO JORNAL</label>
+              <input
+                value={novoNome}
+                onChange={(e) => setNovoNome(e.target.value)}
+                placeholder="Ex: Jornal de Contagem"
+                className="w-full px-3 py-2 border border-outline-variant rounded-lg outline-none focus:border-secondary"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold tracking-wider text-on-surface-variant block mb-1">URL DO FEED RSS</label>
+              <input
+                value={novoRss}
+                onChange={(e) => setNovoRss(e.target.value)}
+                placeholder="https://exemplo.com.br/rss"
+                className="w-full px-3 py-2 border border-outline-variant rounded-lg outline-none focus:border-secondary font-mono text-xs"
+              />
+            </div>
+            <button type="submit" className="bg-primary text-on-primary px-4 py-2 rounded-lg font-bold text-sm">Adicionar</button>
+          </form>
+
+          {naoAdicionados.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-on-surface-variant mb-1">SUGESTÕES PARA CONTAGEM/MG</p>
+              <div className="flex flex-wrap gap-1">
+                {naoAdicionados.map((s) => (
+                  <button
+                    key={s.rss}
+                    onClick={() => adicionarSugestao(s)}
+                    className="text-[11px] px-2 py-1 rounded-full bg-secondary/10 text-secondary hover:bg-secondary hover:text-on-secondary font-semibold flex items-center gap-1"
+                  >
+                    <Icon name="add" className="text-xs" /> {s.nome}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="p-5 space-y-4">
+        {jornais.length === 0 ? (
+          <div className="border-2 border-dashed border-outline-variant rounded-xl p-8 text-center">
+            <Icon name="rss_feed" className="text-4xl text-on-surface-variant/40" />
+            <p className="text-on-surface-variant mt-2 text-sm">Nenhum jornal adicionado.</p>
+            <button onClick={() => setAdding(true)} className="mt-3 text-secondary text-sm font-bold hover:underline">
+              + Adicionar primeiro jornal ou usar uma sugestão
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {jornais.map((j) => {
+              const f = feeds[j.id] || { loading: true, items: [] };
+              return (
+                <div key={j.id} className="border border-outline-variant/40 rounded-xl overflow-hidden flex flex-col">
+                  <div className="bg-surface-container-low/40 px-4 py-3 border-b border-outline-variant/40 flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-sm text-on-surface truncate">{j.nome}</p>
+                      <p className="text-[10px] text-on-surface-variant truncate">{j.rss}</p>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button onClick={() => refresh(j)} title="Atualizar" className="p-1.5 hover:bg-surface-container rounded text-on-surface-variant hover:text-secondary">
+                        <Icon name="refresh" className={`text-base ${f.loading ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button onClick={() => remover(j)} title="Remover" className="p-1.5 hover:bg-error/10 rounded text-on-surface-variant hover:text-error">
+                        <Icon name="delete" className="text-base" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 flex-1">
+                    {f.loading ? (
+                      <p className="text-xs text-on-surface-variant flex items-center gap-2 py-4 justify-center">
+                        <Icon name="autorenew" className="animate-spin text-base" /> Buscando manchetes...
+                      </p>
+                    ) : f.error ? (
+                      <p className="text-xs text-error py-4 text-center">⚠ {f.error} — verifique se o URL é um feed RSS válido.</p>
+                    ) : f.items.length === 0 ? (
+                      <p className="text-xs text-on-surface-variant py-4 text-center">Sem manchetes recentes.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                        {f.items.map((it, i) => (
+                          <a key={i} href={it.link} target="_blank" rel="noreferrer" className="flex gap-3 p-2 rounded-lg hover:bg-surface-container-low/50 group">
+                            {it.thumbnail && (
+                              <img src={it.thumbnail} alt="" className="w-16 h-16 rounded-md object-cover flex-shrink-0" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-on-surface group-hover:text-secondary line-clamp-2 leading-snug">{it.title}</p>
+                              {it.description && <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-2">{it.description}</p>}
+                              <p className="text-[10px] text-on-surface-variant mt-1">{it.pubDate ? new Date(it.pubDate).toLocaleString('pt-BR') : '—'}</p>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-primary text-on-primary px-4 py-3 rounded-xl shadow-2xl border border-secondary/40 flex items-center gap-2 z-50">
+          <Icon name="check_circle" className="text-emerald-400" />
+          <span className="text-sm font-semibold">{toast}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({ icon, tone, label, value, hint, hintTone }) {
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant/40 rounded-2xl p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-bold tracking-[0.15em] text-on-surface-variant">{label}</span>
+        <div className={`w-10 h-10 rounded-xl ${tone} flex items-center justify-center`}>
+          <Icon name={icon} />
+        </div>
+      </div>
+      <p className="text-3xl font-bold text-primary">{value}</p>
+      <p className={`text-xs mt-1 ${hintTone}`}>{hint}</p>
     </div>
   );
 }

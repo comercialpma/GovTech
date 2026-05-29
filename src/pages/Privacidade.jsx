@@ -83,7 +83,12 @@ export default function Privacidade() {
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Hero */}
       <section className="relative rounded-2xl overflow-hidden bg-primary text-on-primary p-8 shadow-xl">
-        <div className="absolute inset-0 opacity-25 bg-[radial-gradient(circle_at_80%_20%,#316bf3,transparent_55%)]" />
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-30"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1614064641938-3bbee52942c7?auto=format&fit=crop&w=1600&q=70')" }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/95 via-primary/80 to-primary/40" />
+        <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_80%_20%,#316bf3,transparent_55%)]" />
         <div className="relative flex items-start justify-between flex-wrap gap-4">
           <div className="max-w-3xl">
             <span className="inline-block bg-emerald-500/20 text-emerald-300 text-[10px] font-bold tracking-[0.2em] px-2 py-1 rounded flex items-center gap-1.5 w-fit">

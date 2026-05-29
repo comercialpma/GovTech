@@ -17,6 +17,7 @@ const menu = [
   { to: '/portal-cidadao', label: 'Portal do Cidadão', icon: 'person_pin_circle' },
   { to: '/protocolos', label: 'Gestão de Protocolos', icon: 'assignment' },
   { to: '/usuarios', label: 'Gestão de Usuários', icon: 'group' },
+  { to: '/impostometro', label: 'Impostômetro', icon: 'attach_money' },
   { to: '/configuracoes', label: 'Configurações', icon: 'settings' },
 ];
 

@@ -16,6 +16,7 @@ import Termos from './pages/Termos.jsx';
 import Privacidade from './pages/Privacidade.jsx';
 import Ouvidoria from './pages/Ouvidoria.jsx';
 import PesquisaOpiniao from './pages/PesquisaOpiniao.jsx';
+import Impostometro from './pages/Impostometro.jsx';
 import Vereadores from './pages/Vereadores.jsx';
 import MinhasAtividades from './pages/MinhasAtividades.jsx';
 import InteligenciaPolitica from './pages/InteligenciaPolitica.jsx';
@@ -73,6 +74,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={['admin_municipal', 'admin_estadual', 'admin_master']}>
             <Layout><GestaoUsuarios /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/impostometro"
+        element={
+          <ProtectedRoute>
+            <Layout><Impostometro /></Layout>
           </ProtectedRoute>
         }
       />

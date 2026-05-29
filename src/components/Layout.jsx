@@ -18,6 +18,7 @@ const pageTitle = {
   '/privacidade': 'Política de Privacidade',
   '/ouvidoria': 'Ouvidoria',
   '/inteligencia': 'Inteligência Política',
+  '/impostometro': 'Impostômetro Contagem',
   '/vereadores': 'Vereadores',
   '/vereadores/atividades': 'Vereadores › Minhas Atividades',
   '/vereadores/pesquisa-opiniao': 'Vereadores › Pesquisa de Opinião',
